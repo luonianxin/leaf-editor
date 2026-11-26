@@ -8,6 +8,7 @@ import { browserFiles, directoryPort, downloadDocument, filePort, isDesktop } fr
 import DirectoryTreeNode from "./components/DirectoryTreeNode.vue";
 import StatusSelect from "./components/StatusSelect.vue";
 import { LANGUAGES, languageFor, type LanguageId } from "./editor/languages";
+import type { MarkdownFormatAction, MarkdownFormatOptions } from "./editor/markdown-formatting";
 
 const TextEditor = defineAsyncComponent(() => import("./editor/TextEditor.vue"));
 const PathPickerDialog = defineAsyncComponent(() => import("./components/PathPickerDialog.vue"));
@@ -19,7 +20,14 @@ const directoryTree = reactive(new DirectoryTree(directoryPort));
 workspace.create();
 const active = computed(() => workspace.active);
 const documentIds = computed(() => workspace.documents.map((item) => item.id));
-const editor = ref<{ search(): void; undo(): void; redo(): void; focus(): void; goToLine(line: number): void }>();
+const editor = ref<{
+  search(): void;
+  undo(): void;
+  redo(): void;
+  focus(): void;
+  goToLine(line: number): void;
+  formatMarkdown(action: MarkdownFormatAction, options?: MarkdownFormatOptions): "applied" | "composing" | "unchanged";
+}>();
 const fileInput = ref<HTMLInputElement>();
 const theme = ref(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
 const wrap = ref(false);
@@ -30,12 +38,31 @@ const fontSize = ref(14);
 const cursor = reactive({ line: 1, column: 1, selected: 0 });
 const languageOverrides = reactive(new Map<string, LanguageId>());
 const language = computed(() => active.value ? languageOverrides.get(active.value.id) ?? languageFor(active.value.name) : "text");
+interface MarkdownTool { action: MarkdownFormatAction; label: string; symbol: string; symbolClass?: string; primary: boolean }
+const markdownTools: readonly MarkdownTool[] = [
+  { action: "bold", label: "加粗", symbol: "B", symbolClass: "font-bold", primary: true },
+  { action: "italic", label: "斜体", symbol: "I", symbolClass: "italic", primary: true },
+  { action: "strikethrough", label: "删除线", symbol: "S", symbolClass: "line-through", primary: true },
+  { action: "inlineCode", label: "行内代码", symbol: "</>", symbolClass: "font-mono text-[10px]", primary: true },
+  { action: "heading1", label: "一级标题", symbol: "H1", symbolClass: "text-[10px] font-semibold", primary: true },
+  { action: "heading2", label: "二级标题", symbol: "H2", symbolClass: "text-[10px] font-semibold", primary: true },
+  { action: "blockquote", label: "引用", symbol: "❝", primary: true },
+  { action: "link", label: "链接", symbol: "↗", primary: false },
+  { action: "unorderedList", label: "无序列表", symbol: "•", primary: false },
+  { action: "orderedList", label: "有序列表", symbol: "1.", symbolClass: "text-[10px] font-semibold", primary: false },
+  { action: "horizontalRule", label: "分隔线", symbol: "—", primary: false },
+  { action: "codeBlock", label: "代码块", symbol: "{}", symbolClass: "font-mono text-[10px]", primary: false },
+  { action: "image", label: "图片语法", symbol: "▧", primary: false },
+  { action: "table", label: "插入表格", symbol: "▦", primary: false },
+];
 const outline = computed(() => active.value ? buildOutline(active.value.text, language.value) : []);
 const lineEndingOptions = computed(() => LINE_ENDINGS.filter((item) => item.value !== "mixed" || active.value?.lineEnding === "mixed"));
 const helpShortcuts = computed<[string, string][]>(() => [
   ["新建文件", "Ctrl + N"], ["打开文件", "Ctrl + O"],
   ...(isDesktop ? [["打开目录", "Ctrl + Shift + O"]] as [string, string][] : []),
   ["保存 / 导出", "Ctrl + S"], ["另存为", "Ctrl + Shift + S"], ["关闭标签", "Ctrl + W"],
+  ["Markdown 一级 / 二级标题", "Ctrl + 1 / 2"],
+  ["Markdown 加粗 / 斜体", "Ctrl + B / I"], ["Markdown 链接", "Ctrl + K"],
   ["查找与替换", "Ctrl + F"], ["跳转到行", "Ctrl + G"], ["撤销 / 重做", "Ctrl + Z / Y"],
 ]);
 const notice = ref("");
@@ -45,6 +72,10 @@ const busyOpening = ref(false);
 const helpOpen = ref(false);
 const helpDialog = ref<HTMLDialogElement>();
 const goDialog = ref<HTMLDialogElement>();
+const markdownMore = ref<HTMLDetailsElement>();
+const tableDialog = ref<HTMLDialogElement>();
+const tableRows = ref(2);
+const tableColumns = ref(2);
 const goLine = ref(1);
 const readyReported = ref(false);
 const editorMounted = ref(false);
@@ -293,6 +324,28 @@ function setEncoding(encoding: Encoding): void { if (active.value) workspace.set
 function setLineEnding(lineEnding: LineEnding): void { if (active.value) workspace.setFormat(active.value.id, { lineEnding }); }
 function setLanguage(next: LanguageId): void { if (active.value) languageOverrides.set(active.value.id, next); }
 function canPreviewMarkdown(): boolean { return language.value === "markdown"; }
+function canFormatMarkdown(): boolean { return !!active.value && language.value === "markdown" && !active.value.busy; }
+function applyMarkdownFormat(action: MarkdownFormatAction, options?: MarkdownFormatOptions): void {
+  markdownMore.value && (markdownMore.value.open = false);
+  if (!canFormatMarkdown()) return;
+  const result = editor.value?.formatMarkdown(action, options);
+  if (result === "composing") notify("输入法组合尚未结束，完成当前输入后再应用格式。");
+}
+function runMarkdownTool(action: MarkdownFormatAction): void {
+  if (action === "table") showTableDialog();
+  else applyMarkdownFormat(action);
+}
+function showTableDialog(): void {
+  if (!canFormatMarkdown()) return;
+  tableRows.value = 2;
+  tableColumns.value = 2;
+  if (markdownMore.value) markdownMore.value.open = false;
+  tableDialog.value?.showModal();
+}
+function insertMarkdownTable(): void {
+  applyMarkdownFormat("table", { tableRows: tableRows.value, tableColumns: tableColumns.value });
+  tableDialog.value?.close();
+}
 function setMarkdownMode(mode: "source" | "preview"): void {
   if (mode === "preview" && !canPreviewMarkdown()) return;
   markdownMode.value = mode;
@@ -317,7 +370,7 @@ function editorReady(): void { editorMounted.value = true; void reportReady(); }
 
 function keyboard(event: KeyboardEvent): void {
   if (event.isComposing || (!event.ctrlKey && !event.metaKey) || event.altKey) return;
-  if (question.value || pickerOpen.value || helpDialog.value?.open || goDialog.value?.open) return;
+  if (question.value || pickerOpen.value || helpDialog.value?.open || goDialog.value?.open || tableDialog.value?.open) return;
   const key = event.key.toLowerCase();
   if (["n", "o", "s", "w", "g"].includes(key)) {
     event.preventDefault();
@@ -418,6 +471,43 @@ onBeforeUnmount(() => {
         <button class="btn btn-ghost btn-sm text-xs hidden sm:inline-flex" :aria-pressed="wrap" @click="wrap = !wrap">{{ wrap ? '✓ 自动换行' : '自动换行' }}</button>
         <button class="btn btn-ghost btn-sm btn-square" aria-label="切换文件列表" :aria-pressed="sidebar" @click="sidebar = !sidebar"><svg viewBox="0 0 20 20" class="size-4" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3" width="15" height="14" rx="2" /><path d="M7 3v14" /></svg></button>
       </div>
+    </div>
+
+    <div v-if="active && canPreviewMarkdown()" class="flex h-10 shrink-0 items-center gap-1 border-b border-base-300/70 bg-base-200/30 px-3 sm:px-4" role="toolbar" aria-label="Markdown 格式">
+      <span class="mr-1 hidden shrink-0 text-[10px] font-semibold tracking-[0.12em] text-base-content/40 sm:inline">MARKDOWN</span>
+      <button
+        v-for="tool in markdownTools.filter((item) => item.primary)"
+        :key="tool.action"
+        type="button"
+        class="btn btn-ghost btn-xs btn-square shrink-0"
+        :aria-label="tool.label"
+        :title="tool.label"
+        :disabled="active.busy"
+        @mousedown.prevent
+        @click="runMarkdownTool(tool.action)"
+      ><span :class="tool.symbolClass">{{ tool.symbol }}</span></button>
+      <span class="mx-1 h-4 shrink-0 border-l border-base-300" />
+      <div class="hidden items-center gap-1 lg:flex">
+        <button
+          v-for="tool in markdownTools.filter((item) => !item.primary)"
+          :key="tool.action"
+          type="button"
+          class="btn btn-ghost btn-xs btn-square"
+          :aria-label="tool.label"
+          :title="tool.label"
+          :disabled="active.busy"
+          @mousedown.prevent="tool.action !== 'table'"
+          @click="runMarkdownTool(tool.action)"
+        ><span :class="tool.symbolClass">{{ tool.symbol }}</span></button>
+      </div>
+      <details ref="markdownMore" class="dropdown dropdown-end ml-auto lg:hidden">
+        <summary class="btn btn-ghost btn-xs px-2 text-[10px]">更多</summary>
+        <ul class="menu dropdown-content z-30 mt-1 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg" aria-label="更多 Markdown 格式">
+          <li v-for="tool in markdownTools.filter((item) => !item.primary)" :key="tool.action">
+            <button type="button" class="gap-3 text-xs" :aria-label="tool.label" :disabled="active.busy" @click="runMarkdownTool(tool.action)"><span class="flex w-5 justify-center" :class="tool.symbolClass">{{ tool.symbol }}</span>{{ tool.label }}</button>
+          </li>
+        </ul>
+      </details>
     </div>
 
     <div v-if="error" role="alert" class="alert alert-error rounded-none border-0 py-2 text-xs sm:alert-horizontal">
@@ -539,6 +629,18 @@ onBeforeUnmount(() => {
     </footer>
 
     <PathPickerDialog v-if="isDesktop && pickerOpen" v-model:open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath" @select="acceptPickedPaths" />
+    <dialog ref="tableDialog" class="modal" aria-labelledby="table-title">
+      <form method="dialog" class="modal-box max-w-sm" @submit.prevent="insertMarkdownTable">
+        <h2 id="table-title" class="text-base font-semibold">插入 GFM 表格</h2>
+        <p class="mt-2 text-xs leading-5 text-base-content/55">生成可继续编辑的 Markdown 源码；预览模式会使用现有安全表格渲染。</p>
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <label class="text-xs text-base-content/65">列数<input v-model.number="tableColumns" class="input input-sm mt-1.5 w-full" type="number" min="1" max="8" required aria-label="表格列数" /></label>
+          <label class="text-xs text-base-content/65">数据行数<input v-model.number="tableRows" class="input input-sm mt-1.5 w-full" type="number" min="1" max="10" required aria-label="表格数据行数" /></label>
+        </div>
+        <div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" @click="tableDialog?.close()">取消</button><button type="submit" class="btn btn-sm">插入表格</button></div>
+      </form>
+      <form method="dialog" class="modal-backdrop"><button aria-label="取消插入表格">关闭</button></form>
+    </dialog>
     <dialog ref="questionDialog" class="modal" aria-labelledby="question-title" @cancel.prevent="answer('cancel')">
       <div v-if="question" class="modal-box max-w-md border border-base-300">
         <h2 id="question-title" class="text-base font-semibold">{{ question.title }}</h2><p class="mt-3 whitespace-pre-line text-sm leading-6 text-base-content/65">{{ question.message }}</p>

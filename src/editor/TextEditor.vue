@@ -2,13 +2,14 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from "@codemirror/state";
 import { EditorView, crosshairCursor, drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, rectangularSelection } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from "@codemirror/commands";
 import { HighlightStyle, bracketMatching, defaultHighlightStyle, foldGutter, indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { closeSearchPanel, highlightSelectionMatches, openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import { tags } from "@lezer/highlight";
 import type { DocumentTab } from "../core/types";
 import { loadLanguage, type LanguageId } from "./languages";
+import { markdownFormatTransaction, type MarkdownFormatAction, type MarkdownFormatOptions } from "./markdown-formatting";
 import { markdownLivePreview } from "./markdown-live-preview";
 
 const props = withDefaults(defineProps<{ document: DocumentTab; documentIds: string[]; language: LanguageId; dark: boolean; wrap: boolean; fontSize: number; visualMarkdown?: boolean }>(), { visualMarkdown: false });
@@ -41,7 +42,7 @@ function appearance(): Extension {
     ".cm-line": { paddingLeft: "20px", paddingRight: "24px" },
     ".cm-gutters": { backgroundColor: "var(--editor-gutter)", color: "var(--syntax-comment)", border: "none", minWidth: "52px" },
     ".cm-gutterElement": { padding: "0 10px 0 12px" },
-    ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
+    ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "color-mix(in srgb, var(--color-primary) 6%, transparent)" },
     "&.cm-focused": { outline: "none" },
     ".cm-selectionBackground": { backgroundColor: "var(--editor-selection-blurred) !important", borderRadius: "2px" },
     "&.cm-focused .cm-selectionBackground": { backgroundColor: "var(--editor-selection) !important", boxShadow: "inset 0 -1px color-mix(in srgb, var(--color-primary) 40%, transparent)" },
@@ -71,7 +72,20 @@ function createState(text: string): EditorState {
       dropCursor(), rectangularSelection(), crosshairCursor(), bracketMatching(), closeBrackets(), indentOnInput(), foldGutter(),
       EditorState.phrases.of({ Find: "查找内容", Replace: "替换为", next: "下一个", previous: "上一个", all: "全部选中", "match case": "区分大小写", regexp: "正则表达式", "by word": "整词匹配", replace: "替换", "replace all": "全部替换", close: "关闭查找", "Go to line": "跳转到行", go: "跳转" }),
       search({ top: true }), highlightSelectionMatches(), syntaxHighlighting(defaultHighlightStyle, { fallback: true }), highlights,
-      keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+      keymap.of([
+        ...([
+          ["Mod-1", "heading1"], ["Mod-2", "heading2"],
+          ["Mod-b", "bold"], ["Mod-i", "italic"], ["Mod-k", "link"],
+        ] as const).map(([key, action]) => ({
+          key,
+          run: () => {
+            if (props.language !== "markdown" || props.document.busy || view?.composing) return false;
+            formatMarkdown(action);
+            return true;
+          },
+        })),
+        ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab,
+      ]),
       languageComp.of([]), appearanceComp.of(appearance()), wrapComp.of(props.wrap ? EditorView.lineWrapping : []),
       visualMarkdownComp.of(props.visualMarkdown && props.language === "markdown" ? markdownLivePreview() : []),
       EditorView.contentAttributes.of({ "aria-label": "文件内容", spellcheck: "false" }),
@@ -141,6 +155,19 @@ watch(() => props.visualMarkdown, applyVisualMarkdown);
 watch(() => props.documentIds, (ids) => { for (const id of states.keys()) if (!ids.includes(id)) states.delete(id); });
 onBeforeUnmount(() => { destroyed = true; languageGeneration += 1; view?.destroy(); states.clear(); });
 
+function formatMarkdown(action: MarkdownFormatAction, options: MarkdownFormatOptions = {}): "applied" | "composing" | "unchanged" {
+  if (!view || props.language !== "markdown" || props.document.busy) return "unchanged";
+  if (view.composing) return "composing";
+  const transaction = view.state.update({
+    ...markdownFormatTransaction(view.state, action, options),
+    annotations: [Transaction.userEvent.of("input.format"), isolateHistory.of("full")],
+    scrollIntoView: true,
+  });
+  view.dispatch(transaction);
+  view.focus();
+  return transaction.docChanged ? "applied" : "unchanged";
+}
+
 function goToLine(number: number): void {
   if (!view) return;
   const line = view.state.doc.line(Math.max(1, Math.min(Math.trunc(number), view.state.doc.lines)));
@@ -154,6 +181,7 @@ defineExpose({
   undo: () => view && undo(view),
   redo: () => view && redo(view),
   focus: () => view?.focus(),
+  formatMarkdown,
   goToLine,
 });
 </script>

@@ -41,6 +41,18 @@ export function rangeTouchesActiveLine(from: number, to: number, activeLines: re
   return activeLines.some((line) => from <= line.to && to > line.from);
 }
 
+export function markdownFrontmatterRange(state: EditorState): ActiveLineRange | undefined {
+  if (!state.doc.lines || state.doc.line(1).text.trim() !== "---") return undefined;
+  const last = Math.min(state.doc.lines, 200);
+  let hasMetadata = false;
+  for (let number = 2; number <= last; number += 1) {
+    const line = state.doc.line(number);
+    if (line.text.trim() === "---") return hasMetadata ? { from: 0, to: line.to } : undefined;
+    if (/^[\w.-]+\s*:/.test(line.text)) hasMetadata = true;
+  }
+  return undefined;
+}
+
 export function imagePlaceholderLabel(source: string): string {
   if (!source.startsWith("![")) return "Image";
   let alt = "";
@@ -74,6 +86,18 @@ class MarkerPlaceholder extends WidgetType {
     element.textContent = this.label;
     element.setAttribute("aria-label", this.label);
     return element;
+  }
+}
+
+class HorizontalRuleWidget extends WidgetType {
+  override eq(other: WidgetType): boolean { return other instanceof HorizontalRuleWidget; }
+
+  override toDOM(): HTMLElement {
+    const separator = document.createElement("span");
+    separator.className = "cm-md-horizontal-rule";
+    separator.setAttribute("role", "separator");
+    separator.setAttribute("aria-label", "分隔线");
+    return separator;
   }
 }
 
@@ -176,6 +200,7 @@ function decorationsFor(view: EditorView): DecorationSet {
 
   const decorations: Range<Decoration>[] = [];
   const activeLines = activeLineRanges(state);
+  const frontmatter = markdownFrontmatterRange(state);
   const seenNodes = new Set<string>();
 
   for (const visible of view.visibleRanges) {
@@ -183,6 +208,9 @@ function decorationsFor(view: EditorView): DecorationSet {
       from: visible.from,
       to: visible.to,
       enter(node) {
+        // Frontmatter is preserved as exact source; CommonMark otherwise parses its
+        // opening delimiter as a rule and the closing delimiter as a Setext heading.
+        if (frontmatter && node.name !== "Document" && node.from >= frontmatter.from && node.to <= frontmatter.to) return false;
         // A table is either a state-owned block widget or entirely raw source.
         if (node.name === "Table") return false;
         const key = `${node.name}:${node.from}:${node.to}`;
@@ -211,6 +239,9 @@ function decorationsFor(view: EditorView): DecorationSet {
           decorations.push(Decoration.mark({ class: "cm-md-strikethrough" }).range(node.from, node.to));
         } else if (node.name === "InlineCode") {
           decorations.push(Decoration.mark({ class: "cm-md-inline-code" }).range(node.from, node.to));
+        } else if (node.name === "HorizontalRule" && !rangeTouchesActiveLine(node.from, node.to, activeLines)) {
+          decorations.push(Decoration.replace({ widget: new HorizontalRuleWidget() }).range(node.from, node.to));
+          return false;
         } else if (node.name === "Link") {
           decorations.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
         } else if (node.name === "URL") {
@@ -292,6 +323,7 @@ const markdownTheme = EditorView.theme({
   ".cm-md-strikethrough": { textDecoration: "line-through" },
   ".cm-md-link": { color: "var(--color-primary)", textDecoration: "underline", textUnderlineOffset: "2px" },
   ".cm-md-url": { marginLeft: "0.25em", opacity: "0.65", fontFamily: "'Cascadia Code', 'Consolas', monospace", fontSize: "0.9em" },
+  ".cm-md-horizontal-rule": { display: "block", width: "calc(100% - 4px)", height: "1px", margin: "0.85em 2px", borderTop: "1px solid var(--color-base-300)" },
   ".cm-md-list-marker": { display: "inline-block", minWidth: "1em", color: "var(--color-primary)" },
   ".cm-md-task-marker": { display: "inline-block", minWidth: "1.25em", color: "var(--color-primary)" },
   ".cm-md-image-placeholder": {

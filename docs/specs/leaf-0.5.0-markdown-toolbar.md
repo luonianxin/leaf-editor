@@ -27,4 +27,12 @@
 
 ## 当前状态
 
-仅记录下版规格，尚未实现或测试。当前 0.4.0 的正式打包与提交请求继续执行，不因本需求增加发布范围。
+2026-11-26：已在 `feat/leaf-0.5.0-markdown-toolbar` 实现首轮工具栏及表格模板弹窗，版本源升级为 0.5.0。单元测试 42/42、浏览器回归 13/13、类型检查与前端构建通过；窄屏菜单的中文可访问名称问题已修正。格式事务隔离前后撤销历史。
+
+根据追加反馈，预览模式新增 HorizontalRule 分隔线显示：独立 `---` 离开活动行后显示为横线，源码模式保留文本；测试覆盖 Frontmatter、Setext 标题、围栏代码与表格分隔行不误判。Frontmatter 当前采用文首配对 `---` 且包含键值行的保守识别，不是完整 YAML 解析器。
+
+后续补充：已加入 Ctrl+1/2、Ctrl+B/I/K 快捷键，修正当前行不透明背景遮住局部选区的问题。浏览器回归现为 14/14，通过类型检查；打包守卫 12/12、端口测试 2/2 通过。
+
+已生成 `releases/Leaf-0.5.0-windows-x64-portable.zip`，ZIP SHA-256：`4f227979f992d087a6f623cfd156c2c4ac794439aef3bbdd210a1215b7d73f77`。全新解压 86 项文件大小与哈希验证通过，许可 327 项、未解析 0；Windows FileVersion/ProductVersion 为 0.5.0，EXE SHA-256：`94340086aff3c2a325ca70dd26c99386f05a1a9bf8c13b440b7286b86c95d17b`。
+
+原生验收：首次被正在运行的旧 Leaf 阻挡，未关闭用户窗口或绕过单实例保护。用户退出旧版后，便携 profile 与完整原生 UI 验收通过：`artifacts/native-W36FSz/results.json`。覆盖标题快捷键、局部选区加粗/撤销、工具栏分隔线及既有表格/文件安全流程；已查看 `native-markdown-toolbar-selection.png`，局部选区蓝色高亮清晰。默认无 TCP listener，profile 位于包旁 data/webview，两次 WebView 清理为 717 ms / 700 ms；历史偶发延迟退出仍不宣称根治。真实中文输入法人工验证及所有格式边界覆盖仍未完成。未提交或推送。

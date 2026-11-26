@@ -1,121 +1,136 @@
 # Leaf · 轻页
 
-基于 DBX 现有编辑器实践重新划分出的独立本地文本编辑器。主工程的源码、依赖和构建脚本不需要修改；此目录有自己的 pnpm / Cargo workspace 与 lockfile。
+一个专注本地文本与 Markdown 的轻量桌面编辑器。
 
-**目标是轻量冷启动，不是已经证明比 EditPlus 更快。** 不加载数据库、插件、AI、更新器或托盘，也不设计后台预热或驻留机制。
+基于 **Rust + Tauri 2 + Vue 3 + CodeMirror 6**，目前主要在 Windows x64 上开发和验证。采用 Apache-2.0 开源许可证。
 
-## 已验证的免安装包
+## 为什么做 Leaf
 
-[Leaf 0.4.0 Windows x64 便携 ZIP](releases/Leaf-0.4.0-windows-x64-portable.zip)，[SHA-256 校验文件](releases/Leaf-0.4.0-windows-x64-portable.zip.sha256)。正式包已从全新目录解压并完成 manifest、便携 profile、真实 EXE 文件安全与 Markdown 表格交互验收；详情见 [VERIFICATION.md](VERIFICATION.md)。
+起点很简单：只是想打开一个文本文件，却觉得编辑器启动等待太久，甚至需要靠后台预热来改善体验。
 
-0.2.0 历史包与 0.3.0 候选记录仍保留，不覆盖既有产物。已知限制：Leaf 主进程正常退出后，WebView 子进程曾间歇超过 15 秒才退出；0.4.0 正式验收本轮两次清理均在 1 秒内完成，但不据此宣称该间歇问题已根治。
+我们希望编辑器回到最朴素的用途：**需要时打开，打开后编辑，保存时可靠。** 不为了一个本地文本文件加载数据库、AI、插件市场或更新服务，也不依赖托盘常驻、开机启动和后台预热。
 
-## 版本记录
+Leaf 最初在 DBX 源码目录中探索实现，借鉴其 CodeMirror 标签状态、编码读写、保存冲突和外部变化处理实践，随后拆分为独立应用。它不是精简版数据库客户端，也不是 DBX 官方发行版。
 
-当前正式版本为 **0.4.0**；增加应用内文件/目录选择器、同一 CodeMirror 文档上的 Markdown 源码/预览编辑，以及安全的 GFM 表格渲染与对应源码定位。具体变更与限制见 [CHANGELOG.md](CHANGELOG.md)。
+另一个重要原则是：**内容安全比功能数量重要。** 不静默覆盖冲突文件，不把浏览器导出伪装成原位保存，不为了 Markdown 预览把整个文档重新序列化。
 
-## 运行
+> 轻量冷启动是设计目标，不是已经证明的性能优势。尚未完成与 EditPlus 等编辑器的同机冷启动基准，不宣称 Leaf 比它们更快。
 
-在这个目录内：
+## 当前能力
 
-```bash
-pnpm install
-pnpm dev:web       # 浏览器预览；优先 1430，被占用时自动换端口
-pnpm dev           # Tauri 桌面开发版；实际绑定后传入 devUrl
-pnpm build         # 类型检查 + 前端生产构建
-pnpm build:desktop # Windows x64 Release，不安装/不注册文件关联
-pnpm package:portable # 构建并生成带校验码的 ZIP
-```
+- 多标签文本编辑，每个标签独立保留撤销历史、选区和滚动位置。
+- 应用内文件/目录选择器：路径输入、面包屑、文件多选、目录导航。
+- 目录树按需展开，左键单击打开文件；符号链接显示但不递归进入。
+- 文件 / 大纲双视图，点击标题或符号跳转。
+- 查找替换、跳行、软换行、浅深主题与清晰的局部选区高亮。
+- UTF-8、UTF-8 BOM、UTF-16 LE/BE、GBK；LF、CRLF、CR。
+- 未保存关闭保护、外部修改/删除提示、保存冲突检查。
+- Markdown 源码 / 可编辑预览共用同一 CodeMirror 文档，不做 HTML→Markdown 全文转换。
+- GFM 表格预览、列对齐、行内格式；点击表格后编辑对应源码。
+- Markdown 格式工具栏：标题、强调、列表、引用、链接、图片语法、代码与表格模板。
+- 独立 `---` 行的分隔线预览；光标进入时保留源码编辑。
 
-从 DBX 根目录也可以直接使用：
+### 常用快捷键
 
-```bash
-pnpm --dir file-editor dev:web
-pnpm --dir file-editor dev
-```
+| 快捷键 | 功能 |
+| --- | --- |
+| Ctrl+N / Ctrl+O | 新建 / 打开文件 |
+| Ctrl+Shift+O | 打开目录（桌面版） |
+| Ctrl+S / Ctrl+Shift+S | 保存 / 另存为 |
+| Ctrl+F / Ctrl+G | 查找替换 / 跳行 |
+| Ctrl+Z / Ctrl+Y | 撤销 / 重做 |
+| Ctrl+1 / Ctrl+2 | Markdown 一级 / 二级标题 |
+| Ctrl+B / Ctrl+I / Ctrl+K | Markdown 加粗 / 斜体 / 链接 |
 
-Windows 桌面构建需要 Rust MSVC、Visual Studio C++ Build Tools（含 Windows 10/11 SDK）以及 WebView2 Runtime。2026-11-25 已安装官方 Build Tools 2022 与 Windows SDK 10.0.26100.0，构建脚本自动获取 x64 开发环境；原生测试和 Release 构建结果见 `VERIFICATION.md`。仅使用便携包时不需要 Rust、Node 或 Build Tools。
+Markdown 快捷键在编辑器获得焦点、语言为 Markdown 时生效。标题操作作用于当前行或选中行，不必选中整行。工具栏与快捷键使用同一编辑事务。
 
-## 端口与便携模式
+## 使用与版本
 
-- **正式 Release 不启动 Vite 或 HTTP 服务。** `tauri.localhost` 是 WebView2 内嵌协议地址，不是本地 TCP 监听器。
-- `pnpm dev:web` / `pnpm dev` / `pnpm preview` 从 `1430` 开始选择可用端口，先实际绑定，再把 URL 交给桌面窗口。**不会停止占用端口的其他程序。** 用 `LEAF_PORT` 或 `--port` 指定起点：
+当前源码版本为 **0.5.0**。Windows 便携 ZIP 已在开发环境构建并从全新解压目录执行原生验收；详细范围、包哈希和历史失败记录见 [VERIFICATION.md](VERIFICATION.md)。这不等同于所有机器和所有输入场景均已验证。
 
-  ```bash
-  LEAF_PORT=32000 pnpm dev
-  pnpm dev:web --port 32000
-  ```
+本仓库不提交 EXE、测试 artifact 或用户数据。若 Releases 页面尚无附件，请按下节从源码构建，不要把仓库源码 ZIP 当作可运行程序。
 
-- 浏览器测试从 `1470`（`LEAF_TEST_PORT` 可修改）开始，创建并关闭自己的服务，不复用已有监听器。
-- 便携包放在 `releases/`，含 `Leaf.exe`、`portable.flag`、使用说明、更新日志、LICENSE/NOTICE、第三方许可、MPL 依赖源码、文件清单和 ZIP SHA-256。打包前核对版本号、二进制、Cargo/pnpm 两份当前锁文件与构建记录；版本或哈希不一致、许可正文缺失时拒绝打包。
-- 解压整个文件夹到可写目录，再运行 `Leaf.exe`。`portable.flag` 启用 `data/webview` 下的主题/浏览器配置缓存；`LEAF_DATA_DIR` 可显式指定数据根目录。不注册文件关联、不建立开机启动项。
-- 包不内置系统 WebView2 Runtime；x64 GUI、导入 DLL 与静态 CRT 标志会在打包前交叉检查。Windows 11 通常已有 WebView2；缺失时请从微软官方安装 Runtime。程序为未签名早期版本，不要关闭安全软件运行。
+使用便携包时：
 
-## 已实现的范围
+1. 将整个 ZIP 解压到可写目录，不要直接在 ZIP 内运行。
+2. 保存并退出旧版 Leaf，再双击 `Leaf.exe`。
+3. 需要系统已有 Microsoft Edge WebView2 Runtime；包不内置 Runtime。
+4. `portable.flag` 启用包旁 `data/webview` 存储主题与 WebView 数据。
 
-- 多标签；每个标签独立 CodeMirror `EditorState`，含撤销历史、光标和滚动位置。
-- 打开文件、打开目录或拖放；打开操作使用应用内选择器，支持路径、面包屑、文件多选和目录导航。目录树只读取当前层，展开文件夹时按需读取下一层，左键单击文件立即打开。
-- 目录中的文件夹优先排序；符号链接显示但不递归进入；关闭工作区目录不会关闭已打开标签。
-- 保存 / 另存为；未保存关闭确认。
-- 查找与替换、撤销重做、跳行、行号、折叠、自动缩进、软换行。
-- 左侧“文件 / 大纲”双视图；大纲支持 Markdown 标题、JS/TS 类与函数、JSON/YAML 键、HTML/XML 标题或带 id 元素、SQL 对象，单击跳转到对应行。
-- 右下角编码、换行和语法语言使用统一的向上弹出菜单；键盘方向键/Enter/Escape 可操作。
-- 编辑器聚焦和失焦时都保留可辨认的文本选区，状态栏显示选中字符数。
-- 浅/深主题；TXT / JS / TS / JSON / Markdown / HTML / XML / YAML / SQL 按需加载语法。
-- 简化后的“纸页 + 叶片”矢量标识同步用于界面和多尺寸 Windows 可执行文件图标。
-- Markdown 文件可在左下角切换源码/预览模式；两种模式使用同一文档和撤销历史。预览模式仍可编辑，GFM 表格显示为真实表格，点击后定位并编辑对应源码。
-- UTF-8、UTF-8 BOM、UTF-16 LE/BE、GBK；LF / CRLF / CR。
-- 外部修改 / 删除提示；重新载入、保留、另存；保存时校验已知磁盘 hash。
-- 同目录临时文件 + flush/sync + 原子发布，避免直接截断原文件；新目标使用 no-clobber。
-- Tauri 单实例、argv 文件/目录打开队列、打开文件所在目录的监听。
-- 编辑核心就绪埋点；未做系统冷启动基准。
+程序目前未签名；不要为运行 Leaf 关闭 Windows 安全保护。
 
-**浏览器预览限制：** 可以选择文件并编辑、导出副本，但不能覆盖原路径或监听磁盘。因此导出后不把文档标记为已保存，关闭时仍保护未保存内容。GBK 可以读取，但浏览器不能安全写出 GBK；使用桌面版，或明确选择 UTF-8 后导出。
+## 从源码运行
 
-## 安全与首版限制
-
-- 首版最大单文件 16 MiB，超过 2 MiB 的文本不启用语法或大纲解析；不是超大日志编辑器。
-- 检测到 NUL / 无效编码会拒绝打开。不是完善的二进制格式检测器。
-- 混合换行只记录为 `mixed`，内部统一为 LF；保存前必须明确选择统一换行。**首版不支持逐行保留混合换行。**
-- UTF-16 两种保存格式都带 BOM；没有 BOM-less UTF-16 保存模式。
-- 编码菜单控制保存编码，不是“重新按此编码解码磁盘文件”。
-- hash 的最终复查不是跨进程原子 CAS：另一个程序仍可能在最终检查和替换间写入。原子发布防止半文件，不保证阻止所有外部竞态；无断电后目录级持久化保证。
-- 不做崩溃/强制结束后的未保存恢复、历史工作区恢复、全目录搜索、LSP/插件。目录树仅在用户展开时逐层读取，不预扫描整个目录；正常关闭保护不能代替崩溃恢复，请先用副本验证。
-- Markdown 预览不执行原始 HTML、不加载图片且链接不导航；不支持 Mermaid、公式或直接编辑渲染后的表格单元格。超大文档、超大表格及嵌套表格回落为源码。
-- 已知 WebView2 子进程偶有延迟退出；本版不把一次通过视为根因修复。若关闭后短时间内仍看到 `msedgewebview2.exe`，请先确认其命令行 profile 是否属于 Leaf，避免误判其他应用的 WebView 进程。
-- Windows 的 `ReplaceFileW` 已通过临时目录原生测试（含连续覆盖），不是只写了代码；监听和单实例的窗口验证状态见 `VERIFICATION.md`。
-
-## 测试
+前置条件：Node.js 22.13+、pnpm 10；桌面构建另外需要 Rust MSVC 工具链、Visual Studio C++ Build Tools、Windows SDK 和系统 WebView2。
 
 ```bash
-pnpm test           # 文档操作公开接口
-pnpm test:ports     # 占用端口跳过；不结束原服务
-pnpm test:packaging # PE 架构/依赖和许可收集器
-pnpm test:e2e       # 浏览器交互；独占测试服务
-pnpm test:native    # Rust 文件模块，含 Windows 原子替换
-pnpm test:native:ui /absolute/path/to/extracted/Leaf.exe # 实际便携 Release 窗口
-pnpm test:native:profile /absolute/path/to/extracted/Leaf.exe # 真实 WebView 配置路径与无监听
+git clone https://github.com/luonianxin/leaf-editor.git
+cd leaf-editor
+pnpm install --frozen-lockfile
+pnpm dev:web          # 浏览器预览
+pnpm dev              # Tauri 桌面开发版
 ```
 
-浏览器测试使用临时上传/下载，不会覆盖用户磁盘文件；截图输出到 `artifacts/`（已忽略）。原生测试只操作系统临时目录。
+```bash
+pnpm build            # 类型检查 + 前端生产构建
+pnpm build:desktop    # Windows x64 Release EXE
+pnpm package:portable # 构建 + 许可收集 + 便携 ZIP
+```
 
-## 模块
+生成物在 `releases/`，包含 EXE、使用说明、许可证、来源声明、所需第三方源码材料、文件清单及 SHA-256 校验文件。独立仓库包含打包需要的 `NOTICE-DBX`，不依赖父目录的 DBX 工程。
+
+正式 Release 使用内嵌前端协议，不启动 Vite/HTTP 服务。开发端口默认从 1430 起、浏览器测试从 1470 起实际绑定可用端口；占用时跳过，**不会停止其他服务**。可以用 `LEAF_PORT` 或 `--port` 指定开发起始端口。
+
+## 内容安全与边界
+
+- Markdown 原始 HTML 不执行、图片仅占位、链接不导航；图片按钮只插入语法，不上传或读取图片。
+- 保存使用同目录临时文件、flush/sync 与原子发布；Windows 现有文件使用 `ReplaceFileW`，新目标禁止未经确认覆盖。
+- 保存前校验已知磁盘 hash，但不是跨进程原子 CAS，不能阻止所有外部写入竞态。
+- 最大单文件 16 MiB；超过 2 MiB 跳过语法和大纲解析。
+- 混合换行保存前要求明确选择统一格式，不支持逐行保留混合换行；UTF-16 保存带 BOM。
+- 超过 524,288 个 UTF-16 代码单元的文档回落源码式编辑；超大或嵌套表格保留源码。
+- 浏览器预览只能导出副本，不能覆盖原路径或监听磁盘，也不能安全写出 GBK。
+- 正常关闭保护不等于崩溃恢复。重要编辑请及时保存。
+
+### 已知限制
+
+- 表格不是直接富文本单元格编辑；不提供可视增删行列、Mermaid、公式或插件系统。
+- Frontmatter 是保守的文首配对分隔符与键值行识别，不是完整 YAML 解析器。
+- 真实中文输入法组合场景尚未完成专项人工验收。
+- 历史测试中 WebView 子进程偶有超过 15 秒才退出；最近验收通过不代表根因已修复。
+- 未验证没有 WebView2 的干净 Windows 虚拟机，也未进行系统冷缓存启动性能对比。
+
+## 验证与贡献
+
+```bash
+pnpm test
+pnpm test:ports
+pnpm test:packaging
+pnpm test:e2e
+pnpm test:native
+pnpm test:native:profile /absolute/path/to/extracted/Leaf.exe
+pnpm test:native:ui /absolute/path/to/extracted/Leaf.exe
+```
+
+原生 UI 测试会拒绝在已有 Leaf 窗口运行时启动，不主动关闭你的编辑窗口。测试截图和临时文件位于被 Git 忽略的 `artifacts/`。
+
+欢迎提交问题与改进。报告文件读写问题时，请尽可能使用脱敏的最小样本，说明编码、换行符、系统版本和复现步骤；不要上传真实凭据、私人文档或 WebView 用户数据。涉及保存机制的改动，请同时提供字节保真和失败不丢内容的测试。
+
+## 项目结构
 
 ```text
-src/core/             文档模型、保存版本与内容安全
-src/editor/           CodeMirror 宿主、独立标签状态、按需语言
-src/platform/         桌面/浏览器文件 adapter
-src/App.vue           操作、标签、对话框、原生事件
-src-tauri/file-core/  不依赖 Tauri / DBX 的 Rust 文件模块
-src-tauri/src/        最小 Tauri 窗口、命令、单实例、监听
+src/core/             文档模型、目录树、大纲与保存状态
+src/editor/           CodeMirror、Markdown 视觉模式与格式事务
+src/components/       文件选择器与界面组件
+src/platform/         桌面 / 浏览器文件适配
+src-tauri/file-core/  独立 Rust 文件读写核心
+src-tauri/src/        Tauri 命令、窗口、单实例与监听
+scripts/              构建、打包、许可与验收工具
+docs/                 研究记录与版本规格
 ```
 
-## 冷启动测量（下一阶段）
+## 许可与致谢
 
-使用 Release 包，与 EditPlus 在同一机器、电源模式与安全软件状态下打开相同文件。分别记录系统重启后的第一次启动、完全退出后重开、已运行时打开文件；后两者不能称为真正的系统冷缓存。
+Leaf 使用 [Apache License 2.0](LICENSE)。感谢 [DBX](https://github.com/t8y2/dbx) 提供的编辑器实践参考，以及 Tauri、Vue、CodeMirror、Marked、Tailwind CSS 和 daisyUI 等项目。
 
-主指标是“启动进程 → 文件显示 → 可输入”，不是窗口可见或 gzip 大小。现有 `report_editor_ready` 输出 `nativeMs/frontendMs`，只记录编辑核心挂载和双帧等待，**不是首次真实键盘输入延迟**。不要用浏览器/Vite 开发版时间推断桌面冷启动。
-
-## 来源与许可
-
-本工程参照 DBX 的 CodeMirror 标签状态、编码读写、保存冲突和外部变化处理实践，但没有依赖 `dbx-core`、`QueryTab` 或 `queryStore`。DBX 与本工程采用 Apache-2.0；再分发时保留来源、适用许可和 NOTICE（见本目录）。
+来源和适用声明见 [NOTICE](NOTICE) 与保留的上游 [NOTICE-DBX](NOTICE-DBX)。上游声明中的数据库调试贡献不表示 Leaf 包含该功能。第三方依赖分别遵循其自身许可证，收集方式及限制见 [licenses/README.md](licenses/README.md)。

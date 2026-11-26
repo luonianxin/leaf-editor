@@ -1,5 +1,15 @@
 # Leaf 验证记录
 
+## 0.5.0 EXE 验收（2026-11-26）
+
+- ZIP：`releases/Leaf-0.5.0-windows-x64-portable.zip`；SHA-256 `4f227979f992d087a6f623cfd156c2c4ac794439aef3bbdd210a1215b7d73f77`。
+- EXE SHA-256：`94340086aff3c2a325ca70dd26c99386f05a1a9bf8c13b440b7286b86c95d17b`；Windows FileVersion/ProductVersion 0.5.0。全新解压目录 `artifacts/portable-0.5.0-verified/` 中 86 个文件大小/哈希通过，许可 327 项、未解析 0。
+- 单元测试 42/42、浏览器回归 14/14、打包守卫 12/12、端口测试 2/2、类型检查及 Release 构建通过。
+- 首次原生验收因用户已有旧 Leaf 窗口而在启动前安全中止；用户退出后运行通过，记录 `artifacts/native-W36FSz/results.json`。包含 Markdown 标题快捷键、局部选区加粗/撤销、工具栏分隔线以及既有表格、编码、冲突、监听、单实例、关闭保护流程。
+- 已查看真实 EXE 的 `native-markdown-toolbar-selection.png`，单行局部选区呈明显蓝色高亮。
+- 独立 profile 检查通过，实际使用包旁 `data/webview/EBWebView`，默认无 TCP listener；两次普通关闭的自有 WebView 清理为 717 ms / 700 ms。历史间歇延迟退出根因未确认，不宣称已根治。
+- 真实中文 IME 人工验收未执行；此轮未逐个穷尽所有工具栏动作的原生边界场景。代码未提交或推送。
+
 日期：2026-11-25～2026-11-26。0.4.0 正式发布记录在前，0.3.0 候选与 0.2.0 历史记录保留在后。验证环境：Windows 11，Node 24.12.0，pnpm 10.34.7，Rust/Cargo 1.99.0，Microsoft C++ Build Tools 14.44.35207，Windows SDK 10.0.26100.0。
 
 ## 0.4.0 正式便携包（2026-11-26）

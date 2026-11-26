@@ -6,6 +6,6 @@ licensed under the Apache License, Version 2.0. The editor is a separately
 implemented, modified application; it does not represent an official DBX release.
 
 For DBX's applicable upstream notices, see NOTICE-DBX in the portable package
-(or ../NOTICE in this source tree). Bundled third-party license texts and
+(also NOTICE-DBX in this standalone source repository). Bundled third-party license texts and
 copyright notices are in THIRD-PARTY-LICENSES.txt; collection decisions and
 limitations are in LICENSE-COLLECTION.md.

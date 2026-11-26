@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @plugin "daisyui" {
   themes: light --default, dark;
-  include: button, tabs, menu, modal, input, select, alert, loading, kbd;
+  include: button, tabs, menu, modal, input, select, alert, loading, kbd, dropdown;
   logs: false;
 }
 @plugin "daisyui/theme" {
@@ -37,8 +37,8 @@
   -webkit-font-smoothing: antialiased;
   --editor-gutter: #fafbfa;
   --editor-active-line: #f4f7f5;
-  --editor-selection: #b9dfcb;
-  --editor-selection-blurred: #dcece3;
+  --editor-selection: #8fc9ed;
+  --editor-selection-blurred: #b5d5e9;
   --editor-search: #fff0bb;
   --syntax-keyword: #7555a6;
   --syntax-string: #347d60;
@@ -49,8 +49,8 @@
 [data-theme="dark"] {
   --editor-gutter: #1a221e;
   --editor-active-line: #253329;
-  --editor-selection: #416e56;
-  --editor-selection-blurred: #2f493b;
+  --editor-selection: #315e86;
+  --editor-selection-blurred: #354f66;
   --editor-search: #665832;
   --syntax-keyword: #c1a0e5;
   --syntax-string: #95c9a5;

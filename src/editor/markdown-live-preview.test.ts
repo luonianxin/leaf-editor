@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import { activeLineRanges, imagePlaceholderLabel, rangeTouchesActiveLine } from "./markdown-live-preview";
+import { activeLineRanges, imagePlaceholderLabel, markdownFrontmatterRange, rangeTouchesActiveLine } from "./markdown-live-preview";
 
 describe("Markdown live preview helpers", () => {
   it("treats every line touched by cursors and selections as active", () => {
@@ -18,6 +18,12 @@ describe("Markdown live preview helpers", () => {
     ]);
     expect(rangeTouchesActiveLine(6, 8, activeLineRanges(state))).toBe(true);
     expect(rangeTouchesActiveLine(26, 27, activeLineRanges(state))).toBe(false);
+  });
+
+  it("keeps YAML-like frontmatter as exact source instead of treating delimiters as rules", () => {
+    const state = EditorState.create({ doc: "---\ntitle: Leaf\n---\n\nBody" });
+    expect(markdownFrontmatterRange(state)).toEqual({ from: 0, to: 19 });
+    expect(markdownFrontmatterRange(EditorState.create({ doc: "before\n\n---\n\nafter" }))).toBeUndefined();
   });
 
   it("builds a bounded text-only label from image alt text", () => {
