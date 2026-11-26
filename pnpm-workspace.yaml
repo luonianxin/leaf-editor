@@ -1,0 +1,6 @@
+# Keep this application independent of the parent DBX packages and lockfile.
+packages:
+  - "."
+
+onlyBuiltDependencies:
+  - esbuild

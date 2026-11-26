@@ -1,0 +1,11 @@
+Leaf (轻页) prototype
+
+This prototype is developed within the DBX source tree and adapts file-editing
+patterns and encoding handling from DBX, https://github.com/t8y2/dbx, which is
+licensed under the Apache License, Version 2.0. The editor is a separately
+implemented, modified application; it does not represent an official DBX release.
+
+For DBX's applicable upstream notices, see NOTICE-DBX in the portable package
+(or ../NOTICE in this source tree). Bundled third-party license texts and
+copyright notices are in THIRD-PARTY-LICENSES.txt; collection decisions and
+limitations are in LICENSE-COLLECTION.md.
