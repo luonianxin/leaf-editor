@@ -2,15 +2,17 @@
 
 基于 DBX 现有编辑器实践重新划分出的独立本地文本编辑器。主工程的源码、依赖和构建脚本不需要修改；此目录有自己的 pnpm / Cargo workspace 与 lockfile。
 
-**目标是轻量冷启动，不是已经证明比 EditPlus 更快。** 不加载数据库、插件、AI、更新器或托盘，不在关闭后预热或驻留。
+**目标是轻量冷启动，不是已经证明比 EditPlus 更快。** 不加载数据库、插件、AI、更新器或托盘，也不设计后台预热或驻留机制。
 
 ## 已验证的免安装包
 
-[Leaf 0.2.0 Windows x64 便携 ZIP](releases/Leaf-0.2.0-windows-x64-portable.zip)（约 2.60 MiB），[SHA-256 校验文件](releases/Leaf-0.2.0-windows-x64-portable.zip.sha256)。已在全新目录解压并运行实际 `Leaf.exe`：86 个文件校验、17 项桌面检查与独立便携 profile 检查全部通过；Windows 文件版本、产品版本及包内 manifest/构建信息均为 `0.2.0`。包含按需目录树、文件/大纲双视图、向上弹出的状态菜单、失焦仍可见的文本选区，以及同步到 EXE 的新图标。正常 Release 无 TCP 监听，关闭后无驻留 Leaf。详见 [VERIFICATION.md](VERIFICATION.md)。0.1.0 历史 ZIP 保留，不覆盖，也不作为本次版本交付。
+[Leaf 0.4.0 Windows x64 便携 ZIP](releases/Leaf-0.4.0-windows-x64-portable.zip)，[SHA-256 校验文件](releases/Leaf-0.4.0-windows-x64-portable.zip.sha256)。正式包已从全新目录解压并完成 manifest、便携 profile、真实 EXE 文件安全与 Markdown 表格交互验收；详情见 [VERIFICATION.md](VERIFICATION.md)。
+
+0.2.0 历史包与 0.3.0 候选记录仍保留，不覆盖既有产物。已知限制：Leaf 主进程正常退出后，WebView 子进程曾间歇超过 15 秒才退出；0.4.0 正式验收本轮两次清理均在 1 秒内完成，但不据此宣称该间歇问题已根治。
 
 ## 版本记录
 
-当前版本为 **0.2.0**；目录树、文件/大纲双视图、状态菜单、文本选区和新图标归入此功能版本。具体变更见 [CHANGELOG.md](CHANGELOG.md)。第三方依赖版本保持不变，旧便携 ZIP 不覆盖。
+当前正式版本为 **0.4.0**；增加应用内文件/目录选择器、同一 CodeMirror 文档上的 Markdown 源码/预览编辑，以及安全的 GFM 表格渲染与对应源码定位。具体变更与限制见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 运行
 
@@ -52,7 +54,7 @@ Windows 桌面构建需要 Rust MSVC、Visual Studio C++ Build Tools（含 Windo
 ## 已实现的范围
 
 - 多标签；每个标签独立 CodeMirror `EditorState`，含撤销历史、光标和滚动位置。
-- 打开文件、打开目录或拖放；目录树只读取当前层，展开文件夹时按需读取下一层，左键单击文件立即打开。
+- 打开文件、打开目录或拖放；打开操作使用应用内选择器，支持路径、面包屑、文件多选和目录导航。目录树只读取当前层，展开文件夹时按需读取下一层，左键单击文件立即打开。
 - 目录中的文件夹优先排序；符号链接显示但不递归进入；关闭工作区目录不会关闭已打开标签。
 - 保存 / 另存为；未保存关闭确认。
 - 查找与替换、撤销重做、跳行、行号、折叠、自动缩进、软换行。
@@ -60,7 +62,8 @@ Windows 桌面构建需要 Rust MSVC、Visual Studio C++ Build Tools（含 Windo
 - 右下角编码、换行和语法语言使用统一的向上弹出菜单；键盘方向键/Enter/Escape 可操作。
 - 编辑器聚焦和失焦时都保留可辨认的文本选区，状态栏显示选中字符数。
 - 浅/深主题；TXT / JS / TS / JSON / Markdown / HTML / XML / YAML / SQL 按需加载语法。
-- 新的“纸页 + 叶片”矢量标识同步用于界面和 Windows 可执行文件图标。
+- 简化后的“纸页 + 叶片”矢量标识同步用于界面和多尺寸 Windows 可执行文件图标。
+- Markdown 文件可在左下角切换源码/预览模式；两种模式使用同一文档和撤销历史。预览模式仍可编辑，GFM 表格显示为真实表格，点击后定位并编辑对应源码。
 - UTF-8、UTF-8 BOM、UTF-16 LE/BE、GBK；LF / CRLF / CR。
 - 外部修改 / 删除提示；重新载入、保留、另存；保存时校验已知磁盘 hash。
 - 同目录临时文件 + flush/sync + 原子发布，避免直接截断原文件；新目标使用 no-clobber。
@@ -78,6 +81,8 @@ Windows 桌面构建需要 Rust MSVC、Visual Studio C++ Build Tools（含 Windo
 - 编码菜单控制保存编码，不是“重新按此编码解码磁盘文件”。
 - hash 的最终复查不是跨进程原子 CAS：另一个程序仍可能在最终检查和替换间写入。原子发布防止半文件，不保证阻止所有外部竞态；无断电后目录级持久化保证。
 - 不做崩溃/强制结束后的未保存恢复、历史工作区恢复、全目录搜索、LSP/插件。目录树仅在用户展开时逐层读取，不预扫描整个目录；正常关闭保护不能代替崩溃恢复，请先用副本验证。
+- Markdown 预览不执行原始 HTML、不加载图片且链接不导航；不支持 Mermaid、公式或直接编辑渲染后的表格单元格。超大文档、超大表格及嵌套表格回落为源码。
+- 已知 WebView2 子进程偶有延迟退出；本版不把一次通过视为根因修复。若关闭后短时间内仍看到 `msedgewebview2.exe`，请先确认其命令行 profile 是否属于 Leaf，避免误判其他应用的 WebView 进程。
 - Windows 的 `ReplaceFileW` 已通过临时目录原生测试（含连续覆盖），不是只写了代码；监听和单实例的窗口验证状态见 `VERIFICATION.md`。
 
 ## 测试

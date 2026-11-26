@@ -25,7 +25,10 @@ export async function loadLanguage(language: LanguageId): Promise<Extension> {
     case "javascript": return (await import("@codemirror/lang-javascript")).javascript({ jsx: true });
     case "typescript": return (await import("@codemirror/lang-javascript")).javascript({ typescript: true, jsx: true });
     case "json": return (await import("@codemirror/lang-json")).json();
-    case "markdown": return (await import("@codemirror/lang-markdown")).markdown();
+    case "markdown": {
+      const { markdown, markdownLanguage } = await import("@codemirror/lang-markdown");
+      return markdown({ base: markdownLanguage });
+    }
     case "html": return (await import("@codemirror/lang-html")).html();
     case "xml": return (await import("@codemirror/lang-xml")).xml();
     case "yaml": return (await import("@codemirror/lang-yaml")).yaml();

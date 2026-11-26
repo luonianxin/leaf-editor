@@ -43,6 +43,7 @@ export interface DirectoryEntry {
 export interface DirectoryListing {
   root: string;
   name: string;
+  parent: string | null;
   entries: DirectoryEntry[];
 }
 

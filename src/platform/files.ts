@@ -64,6 +64,12 @@ export const browserFiles = new BrowserFiles();
 export const filePort: FilePort = isDesktop ? new DesktopFiles() : browserFiles;
 export const directoryPort: DirectoryPort = isDesktop ? new DesktopDirectories() : new BrowserDirectories();
 
+export async function getStartDirectory(): Promise<string> {
+  if (!isDesktop) throw new Error("浏览器预览不能访问用户主目录，请使用桌面版。");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("get_start_directory");
+}
+
 export function downloadDocument(name: string, text: string, encoding: Encoding, lineEnding: import("../core/types").LineEnding): void {
   const bytes = encodeDownload(text, encoding, lineEnding);
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: "application/octet-stream" }));

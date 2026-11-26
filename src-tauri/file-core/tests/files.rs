@@ -175,6 +175,10 @@ fn directory_listing_is_shallow_sorted_and_rejects_non_directories() {
     let listing = list_directory(dir.path().to_str().unwrap()).unwrap();
     assert_eq!(listing.root, dir.path().canonicalize().unwrap().to_string_lossy());
     assert_eq!(
+        listing.parent.as_deref(),
+        dir.path().canonicalize().unwrap().parent().map(|path| path.to_string_lossy()).as_deref()
+    );
+    assert_eq!(
         listing.entries.iter().map(|entry| (entry.name.as_str(), entry.kind)).collect::<Vec<_>>(),
         vec![
             ("A-folder", leaf_file_core::DirectoryEntryKind::Directory),
@@ -185,4 +189,26 @@ fn directory_listing_is_shallow_sorted_and_rejects_non_directories() {
     );
     assert!(listing.entries.iter().all(|entry| !entry.path.ends_with("nested.txt")));
     assert!(list_directory(dir.path().join("A.txt").to_str().unwrap()).is_err());
+}
+
+#[test]
+fn root_directory_has_no_parent() {
+    let dir = tempfile::tempdir().unwrap();
+    let canonical = dir.path().canonicalize().unwrap();
+    let root = canonical.ancestors().last().unwrap();
+    assert!(list_directory(root.to_str().unwrap()).unwrap().parent.is_none());
+}
+
+#[test]
+fn start_directory_is_canonical_and_must_be_a_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let nested = dir.path().join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    let resolved = leaf_file_core::resolve_start_directory(&nested).unwrap();
+    assert_eq!(resolved, nested.canonicalize().unwrap().to_string_lossy());
+
+    let file = nested.join("file.txt");
+    std::fs::write(&file, "content").unwrap();
+    assert!(leaf_file_core::resolve_start_directory(&file).is_err());
+    assert!(leaf_file_core::resolve_start_directory(&nested.join("missing")).is_err());
 }

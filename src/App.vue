@@ -10,6 +10,10 @@ import StatusSelect from "./components/StatusSelect.vue";
 import { LANGUAGES, languageFor, type LanguageId } from "./editor/languages";
 
 const TextEditor = defineAsyncComponent(() => import("./editor/TextEditor.vue"));
+const PathPickerDialog = defineAsyncComponent(() => import("./components/PathPickerDialog.vue"));
+const pickerOpen = ref(false);
+const pickerMode = ref<"files" | "directory">("files");
+const pickerInitialPath = ref("");
 const workspace = reactive(new DocumentWorkspace(filePort));
 const directoryTree = reactive(new DirectoryTree(directoryPort));
 workspace.create();
@@ -21,6 +25,7 @@ const theme = ref(document.documentElement.dataset.theme === "dark" ? "dark" : "
 const wrap = ref(false);
 const sidebar = ref(true);
 const sidebarView = ref<"files" | "outline">("files");
+const markdownMode = ref<"source" | "preview">("source");
 const fontSize = ref(14);
 const cursor = reactive({ line: 1, column: 1, selected: 0 });
 const languageOverrides = reactive(new Map<string, LanguageId>());
@@ -104,12 +109,21 @@ async function openPaths(paths: string[]): Promise<void> {
     }
   } finally { busyOpening.value = false; }
 }
+function showPathPicker(mode: "files" | "directory"): void {
+  if (pickerOpen.value) return;
+  pickerMode.value = mode;
+  pickerInitialPath.value = directoryTree.root?.path ?? "";
+  pickerOpen.value = true;
+}
 async function openFiles(): Promise<void> {
   if (!isDesktop) { fileInput.value?.click(); return; }
+  showPathPicker("files");
+}
+async function acceptPickedPaths(paths: string[]): Promise<void> {
   try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const paths = await open({ multiple: true, directory: false, title: "打开文本文件" });
-    if (paths) await openPaths(Array.isArray(paths) ? paths : [paths]);
+    if (pickerMode.value === "directory") {
+      if (paths[0]) await openDirectoryPath(paths[0]);
+    } else await openPaths(paths);
   } catch (reason) { fail(reason); }
 }
 async function openDirectoryPath(path: string): Promise<void> {
@@ -119,12 +133,7 @@ async function openDirectoryPath(path: string): Promise<void> {
 }
 async function openDirectory(): Promise<void> {
   if (!isDesktop) { fail("浏览器预览不能读取本地目录，请使用桌面版。"); return; }
-  try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const path = await open({ multiple: false, directory: true, title: "打开工作区目录" });
-    if (!path || Array.isArray(path)) return;
-    await openDirectoryPath(path);
-  } catch (reason) { fail(reason); }
+  showPathPicker("directory");
 }
 async function openLaunchTargets(targets: LaunchTargets): Promise<void> {
   const directory = targets.directories.at(-1);
@@ -274,11 +283,21 @@ function toggleTheme(): void {
   try { localStorage.setItem("leaf:theme", theme.value); } catch { /* No preference storage required. */ }
 }
 function showGoToLine(): void { goLine.value = cursor.line; goDialog.value?.showModal(); }
-function goToLine(): void { if (Number.isFinite(goLine.value)) editor.value?.goToLine(goLine.value); goDialog.value?.close(); }
-function jumpToOutline(line: number): void { editor.value?.goToLine(line); }
+function editorAction(action: "search" | "undo" | "redo" | "goToLine", line = 1): void {
+  if (action === "goToLine") editor.value?.goToLine(line);
+  else editor.value?.[action]();
+}
+function goToLine(): void { if (Number.isFinite(goLine.value)) editorAction("goToLine", goLine.value); goDialog.value?.close(); }
+function jumpToOutline(line: number): void { editorAction("goToLine", line); }
 function setEncoding(encoding: Encoding): void { if (active.value) workspace.setFormat(active.value.id, { encoding }); }
 function setLineEnding(lineEnding: LineEnding): void { if (active.value) workspace.setFormat(active.value.id, { lineEnding }); }
 function setLanguage(next: LanguageId): void { if (active.value) languageOverrides.set(active.value.id, next); }
+function canPreviewMarkdown(): boolean { return language.value === "markdown"; }
+function setMarkdownMode(mode: "source" | "preview"): void {
+  if (mode === "preview" && !canPreviewMarkdown()) return;
+  markdownMode.value = mode;
+  void nextTick(() => editor.value?.focus());
+}
 function showHelp(): void { helpOpen.value = true; void nextTick(() => helpDialog.value?.showModal()); }
 async function openExample(): Promise<void> {
   const text = "# 给专注留一点空间\n\n这是轻页，一个只关心本地文件的编辑器。\n\n- 打开即编辑，不启动数据库或扫描插件。\n- 每个标签保留自己的撤销历史。\n- 保存前检查外部修改，不静默覆盖。\n\n```javascript\nconst message = '你好，轻页';\nconsole.log(message);\n```\n\n试试 Ctrl + F 查找，或点击右下角选择语言。\n";
@@ -298,7 +317,7 @@ function editorReady(): void { editorMounted.value = true; void reportReady(); }
 
 function keyboard(event: KeyboardEvent): void {
   if (event.isComposing || (!event.ctrlKey && !event.metaKey) || event.altKey) return;
-  if (question.value || helpDialog.value?.open || goDialog.value?.open) return;
+  if (question.value || pickerOpen.value || helpDialog.value?.open || goDialog.value?.open) return;
   const key = event.key.toLowerCase();
   if (["n", "o", "s", "w", "g"].includes(key)) {
     event.preventDefault();
@@ -322,6 +341,9 @@ watch(() => workspace.documents.map((item) => item.path).filter((path): path is 
 });
 watch(() => [active.value?.name, active.value?.dirty], () => {
   if (isDesktop) void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTitle(`${active.value?.dirty ? "● " : ""}${active.value?.name ?? "轻页"} · Leaf`)).catch(() => {});
+});
+watch(() => [active.value?.id, language.value], () => {
+  if (!canPreviewMarkdown()) markdownMode.value = "source";
 });
 
 onMounted(async () => {
@@ -388,9 +410,9 @@ onBeforeUnmount(() => {
         <button class="btn btn-sm ml-1 gap-1.5 text-xs" title="保存 Ctrl+S" :disabled="!active || active.busy" @click="saveActive()"><svg viewBox="0 0 20 20" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h10l3 3v11H3V3zM6 3v5h7V3M6 17v-6h8v6" /></svg>{{ isDesktop ? '保存' : '导出' }}</button>
         <button class="btn btn-ghost btn-sm text-xs hidden sm:inline-flex" title="另存为 Ctrl+Shift+S" :disabled="!active || active.busy" @click="saveActive(true)">另存为</button>
         <span class="mx-2 h-4 border-l border-base-300" />
-        <button class="btn btn-ghost btn-sm btn-square text-base" aria-label="撤销" title="撤销 Ctrl+Z" :disabled="!active" @click="editor?.undo()">↶</button>
-        <button class="btn btn-ghost btn-sm btn-square text-base" aria-label="重做" title="重做 Ctrl+Y" :disabled="!active" @click="editor?.redo()">↷</button>
-        <button class="btn btn-ghost btn-sm text-xs" title="查找和替换 Ctrl+F" :disabled="!active" @click="editor?.search()">查找</button>
+        <button class="btn btn-ghost btn-sm btn-square text-base" aria-label="撤销" title="撤销 Ctrl+Z" :disabled="!active" @click="editorAction('undo')">↶</button>
+        <button class="btn btn-ghost btn-sm btn-square text-base" aria-label="重做" title="重做 Ctrl+Y" :disabled="!active" @click="editorAction('redo')">↷</button>
+        <button class="btn btn-ghost btn-sm text-xs" title="查找和替换 Ctrl+F" :disabled="!active" @click="editorAction('search')">查找</button>
       </div>
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-sm text-xs hidden sm:inline-flex" :aria-pressed="wrap" @click="wrap = !wrap">{{ wrap ? '✓ 自动换行' : '自动换行' }}</button>
@@ -438,10 +460,6 @@ onBeforeUnmount(() => {
               </li>
             </ul>
           </div>
-          <div class="shrink-0 border-t border-base-300/70 p-3">
-            <p class="flex items-center gap-2 text-[11px] text-base-content/60"><span class="size-1.5 rounded-full bg-success" />目录按需展开，不递归扫描</p>
-            <p class="mt-1.5 text-[10px] leading-relaxed text-base-content/35">仅监听已打开文件所在目录。<br />退出后不驻留，不做后台预热。</p>
-          </div>
         </template>
 
         <template v-else>
@@ -485,15 +503,15 @@ onBeforeUnmount(() => {
 
         <div id="document-panel" class="relative min-h-0 flex-1" role="tabpanel" :aria-labelledby="active ? `tab-${active.id}` : undefined">
           <Suspense v-if="active">
-            <TextEditor ref="editor" :document="active" :document-ids="documentIds" :language="language" :dark="theme === 'dark'" :wrap="wrap" :font-size="fontSize" @change="(id, text) => workspace.edit(id, text)" @cursor="(line, column, selected) => Object.assign(cursor, { line, column, selected })" @ready="editorReady" />
+            <TextEditor ref="editor" :document="active" :document-ids="documentIds" :language="language" :dark="theme === 'dark'" :wrap="wrap" :font-size="fontSize" :visual-markdown="markdownMode === 'preview'" @change="(id, text) => workspace.edit(id, text)" @cursor="(line, column, selected) => Object.assign(cursor, { line, column, selected })" @ready="editorReady" />
             <template #fallback><div class="flex h-full items-center justify-center gap-2 text-xs text-base-content/45"><span class="loading loading-spinner loading-xs" />正在载入编辑核心</div></template>
           </Suspense>
-          <div v-else class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+          <div v-if="!active" class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
             <img src="/leaf.svg" alt="" class="size-12 opacity-70" /><h2 class="text-lg font-medium">给专注留一点空间</h2><p class="text-sm text-base-content/50">新建一个文件，或把文本文件拖到这里。</p>
             <div class="flex gap-2"><button class="btn btn-sm" @click="newDocument">新建文件</button><button class="btn btn-ghost btn-sm" @click="openFiles">打开文件</button><button v-if="isDesktop" class="btn btn-ghost btn-sm" @click="openDirectory">打开目录</button></div>
             <button class="btn btn-link btn-xs text-base-content/45" @click="openExample">打开示例文档</button>
           </div>
-          <div v-if="active && !active.text" class="pointer-events-none absolute left-20 top-5 max-w-sm select-none text-xs leading-7 text-base-content/25">
+          <div v-if="active && !active.text && markdownMode === 'source'" class="pointer-events-none absolute left-20 top-5 max-w-sm select-none text-xs leading-7 text-base-content/25">
             从这里开始记录。<br /><span class="text-[11px]">Ctrl + O 打开文件 · Ctrl + S {{ isDesktop ? '保存' : '导出副本' }}</span>
           </div>
           <div v-if="dragActive" class="pointer-events-none absolute inset-3 z-10 flex items-center justify-center rounded-box border-2 border-dashed border-primary/50 bg-base-100/95 text-sm">松开以打开文本文件</div>
@@ -503,6 +521,10 @@ onBeforeUnmount(() => {
 
     <footer class="flex h-8 shrink-0 items-center justify-between gap-2 border-t border-base-300/70 bg-base-200/30 px-3 text-[10px] text-base-content/55 sm:px-4" aria-label="文件状态">
       <div class="flex min-w-0 items-center gap-3">
+        <div v-if="active && canPreviewMarkdown()" role="tablist" aria-label="Markdown 模式" class="tabs tabs-border h-7 shrink-0">
+          <button role="tab" class="tab h-7 px-2 text-[10px]" :class="{ 'tab-active': markdownMode === 'source' }" :aria-selected="markdownMode === 'source'" title="显示完整 Markdown 标记" @click="setMarkdownMode('source')">源码模式</button>
+          <button role="tab" class="tab h-7 px-2 text-[10px]" :class="{ 'tab-active': markdownMode === 'preview' }" :aria-selected="markdownMode === 'preview'" title="可编辑的即时预览" @click="setMarkdownMode('preview')">预览模式</button>
+        </div>
         <span v-if="notice" class="truncate text-base-content/75" role="status">{{ notice }}</span>
         <template v-else><span class="max-w-64 truncate" :title="active?.path">{{ active?.path ? (isDesktop ? active.path : '浏览器文件 · 原位保存不可用') : '尚未保存到磁盘' }}</span><span v-if="active?.dirty" class="hidden text-primary/80 sm:inline">有未保存修改</span></template>
         <button v-if="isDesktop && active?.path" class="shrink-0 text-base-content/50 hover:text-base-content" title="检查磁盘文件是否被其他程序修改" @click="refreshAll">检查磁盘</button>
@@ -516,6 +538,7 @@ onBeforeUnmount(() => {
       </div>
     </footer>
 
+    <PathPickerDialog v-if="isDesktop && pickerOpen" v-model:open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath" @select="acceptPickedPaths" />
     <dialog ref="questionDialog" class="modal" aria-labelledby="question-title" @cancel.prevent="answer('cancel')">
       <div v-if="question" class="modal-box max-w-md border border-base-300">
         <h2 id="question-title" class="text-base font-semibold">{{ question.title }}</h2><p class="mt-3 whitespace-pre-line text-sm leading-6 text-base-content/65">{{ question.message }}</p>

@@ -45,6 +45,13 @@ async fn list_directory(path: String) -> Result<DirectoryListing, String> {
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn get_start_directory(app: tauri::AppHandle) -> Result<String, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || leaf_file_core::resolve_start_directory(&home))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn save_text_file(app: tauri::AppHandle, request: SaveRequest) -> Result<SaveResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<NativeState>();
@@ -248,6 +255,7 @@ pub fn run() {
             read_text_file,
             get_text_file_status,
             list_directory,
+            get_start_directory,
             save_text_file,
             set_watched_files,
             take_launch_targets,

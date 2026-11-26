@@ -3,7 +3,7 @@ import { DirectoryTree } from "./directoryTree";
 import type { DirectoryListing, DirectoryPort } from "./types";
 
 function listing(root: string, name: string, entries: DirectoryListing["entries"] = []): DirectoryListing {
-  return { root, name, entries };
+  return { root, name, parent: null, entries };
 }
 
 describe("DirectoryTree", () => {

@@ -1,6 +1,53 @@
 # Leaf 验证记录
 
-日期：2026-11-25～2026-11-26。验证环境：Windows 11，Node 24.12.0，pnpm 10.34.7，Rust/Cargo 1.99.0，Microsoft C++ Build Tools 14.44.35207，Windows SDK 10.0.26100.0。
+日期：2026-11-25～2026-11-26。0.4.0 正式发布记录在前，0.3.0 候选与 0.2.0 历史记录保留在后。验证环境：Windows 11，Node 24.12.0，pnpm 10.34.7，Rust/Cargo 1.99.0，Microsoft C++ Build Tools 14.44.35207，Windows SDK 10.0.26100.0。
+
+## 0.4.0 正式便携包（2026-11-26）
+
+- 正式包：`releases/Leaf-0.4.0-windows-x64-portable.zip`，2,737,034 字节（约 2.61 MiB）。ZIP SHA-256：`b895aaf5a02f21823f604b5c9f751f9a31caab2aafa2df66742cafd958e83212`；sidecar 与实际文件一致。
+- 全新解压到 `artifacts/portable-0.4.0-verified-20261126/Leaf-0.4.0-windows-x64-portable/`。manifest 中 86 个文件的长度和 SHA-256 全部匹配；EXE 为 4,194,816 字节，SHA-256：`deec8cde3f77e45c21e8ff9531e03b0551583c5497aed26492b43bda40d2c79a`。
+- Windows `FileVersion` / `ProductVersion`、`build-info.json` 与 manifest 均为 0.4.0；目标 `x86_64-pc-windows-msvc`，Windows GUI 子系统、静态 CRT、`custom-protocol` 构建记录及两份当前锁文件哈希通过打包前校验。
+- 第三方许可收集 327 项、未解析 0；MPL-2.0 依赖的未修改 Source Code Form 和来源说明包含在包内。该结果不是法律认证。
+- `pnpm test` 34/34、`pnpm test:packaging` 12/12、`pnpm test:ports` 2/2、`pnpm test:native` 9/9、`pnpm test:e2e` 10/10 通过；TypeScript/Vite 与 Rust Release 构建通过。首次 Rust Release 链接在系统内存压力下以 `0xc0000142` 失败，确认无遗留进程且可用物理内存恢复后单独重建成功，不是代码测试失败。
+- `pnpm test:native:profile` 从全新解压 EXE 运行通过：WebView 数据实际写入包旁 `data/webview/EBWebView`，默认无 TCP listener。
+- 完整真实 EXE 验收记录：`artifacts/native-Frf4he/results.json`，`passed: true`、20 项交互检查、console errors 为空。覆盖应用内文件多选/目录导航/链接禁用、目录懒加载、左下角 Markdown 模式、两个 GFM 表格的渲染与源码定位、保存/撤销/重做全文字节核对，以及既有编码、换行、冲突、外部修改、单实例和关闭保护。
+- 已查看 `native-path-picker.png`、`native-directory.png`、`native-outline-selection.png`、`native-markdown-preview.png`、`native-markdown-tables.png`、`native-light.png`、`native-dark.png`；未见空白窗口、布局破损或安全内容被执行。
+- 本轮普通关闭探针中，自有 WebView 子进程清理分别约 883 ms 与 856 ms，验收后 Leaf 自有进程树为空。历史候选曾间歇超过不变的 15 秒阈值，根因仍未确认；该已知限制继续保留，不因本轮通过而宣称已修复。
+- 真实中文输入法组合场景仍未完成专项人工验收；自动化中文输入不冒充 IME 验收。未执行系统冷缓存启动或与 EditPlus 的性能对比。
+
+## 表格功能 EXE 验收构建（2026-11-26，整体未通过）
+
+- 候选：`releases/Leaf-0.3.0-windows-x64-portable-20261126-121245.zip`，2,738,880 字节。二进制仍标记 0.3.0，不是正式 0.4.0 发布包。
+- ZIP SHA-256：`ef6295cb45e22d9ce4d3428048de0db940f5002f585adb9ed3a4e131852972c5`；EXE SHA-256：`b312cb8411c3062656d742322f5b89ab881b17ae39a40007a23bd1e2a90b0cfa`。
+- 全新解压验证 86 个文件的大小/哈希，许可 327 项、未解析 0。
+- `artifacts/native-2R6Pde/results.json`：真实 GFM 表格渲染、第二表格源码定位、恢复预览及保存/撤销/重做后的全文字节核对通过。应用内选择器及全部既有文件保存安全交互通过；已查看 `native-markdown-tables.png`。
+- 首次普通探针 WebView 清理 5,566 ms。最后一次重新启动/关闭探针中 Leaf 主进程退出，但 6 个自有 WebView 子进程在 15 秒期限后仍存在，脚本退出码 1。整体验收失败，未延长通过条件、未强杀子进程制造通过；旧有间歇延迟退出仍未解决。
+- 前端 34 项单元测试、10 项浏览器测试通过；真实中文输入法仍未验收。不要将功能交互通过等同于整包发布通过。
+
+## 0.3.0 此前桌面交互验收（2026-11-26）
+
+- 新包：`releases/Leaf-0.3.0-windows-x64-portable-20261126-093438.zip`，2,735,960 字节。
+- ZIP SHA-256：`d90f22038195159543e0b810f9a9d2c59ee4c3cc3a264d4bd9e240f6555ec03b`。
+- EXE SHA-256：`8c42baec4c16d637081bc607e56dba0f343993f4cc8e35c73ef18bd12c2e7110`。
+- 全新解压目录验证 86 项文件清单；许可 327 项，未解析 0。
+- 完整原生交互脚本退出码 0：`artifacts/native-aVZTzq/results.json`。应用内选择器取消、多选、目录导航、符号链接禁用通过；左下角 Markdown 模式直接编辑/撤销/重做及源码逐字节保存通过；既有编码、冲突、外部变更、关闭取消流程通过。
+- 普通 Release 两次无 TCP 监听；便携 profile 位于 data/webview；两次普通探针 WebView 清理分别 709 / 1,639 ms，未放宽 15 秒条件。历史间歇延迟清理根因仍未确认，本轮通过不等于永久消除。
+- 已查看实际 EXE 截图 `native-path-picker.png` 和 `native-markdown-preview.png`。预览目前是可编辑 CodeMirror 视觉模式，不是富文本表格编辑器。包内早期只读预览说明尚待同步，后续图标优化也需新构建后另行验证。
+
+## 0.3.0 早期候选包验收记录（历史失败保留）
+
+- 初始候选 ZIP：`releases/Leaf-0.3.0-windows-x64-portable.zip`，SHA-256 `5ab9fbfbb3927a93ba5d19aa415d79e2c8f0943ca2766901272f3700d8344a3e`。后续源码修复不能沿用此包的验证结果。
+- 已核对 86 个清单文件；许可 327 项、未解析 0；便携 profile 检查通过。Rust 文件模块 7 项测试通过。
+- 原生完整回归尚未全部通过。`artifacts/native-bEQvTV/results.json` 中 Markdown 标题、返回编辑后的光标及主窗口关闭通过，但最后一次普通启动/关闭探针超时。
+- 缩小复现：`node scripts/test-native-ui.mjs <候选 Leaf.exe> --close-only`。旧的 `MainWindowHandle` 可能选中 `com.leaf.editor-siw` 单实例辅助窗口，已改为枚举并排除工具/零尺寸窗口。
+- 修正窗口选择后，`artifacts/native-Cc5FZx/results.json` 仍记录第二次启动关闭超时：真实编辑器窗口存在，但未收到 `Leaf ready`，启动尚未完成。正在分别验证就绪后关闭和启动阶段行为，退出断言仍为 15 秒。尚不能宣布退出问题全部解决。
+- 修复前端后重新构建候选：`releases/Leaf-0.3.0-windows-x64-portable-20261126-081859.zip`，2,743,175 字节；ZIP SHA-256 `bbe54ef62c4fdbda405fe3e15ddf21a3ba3b3fdf958716f01137e3a4c488267d`；EXE SHA-256 `7030cd9e09d7d632dd34e63e2c353ce3207fe312ebc178d3894bc421ac4e1aca`。全新解压目录中 86 项清单和许可 327/0 已核对。
+- 当前前端：22 项单元测试、类型检查及构建通过；独立串行浏览器复测 9/9 通过。首次浏览器运行 5 通过/3 超时并发生退出挂起，记录保留于 `artifacts/frontend-first-run/`，原因未确认。打包测试 12/12、端口测试 2/2 通过。
+- 新候选 `artifacts/native-c4kOBv/results.json`：默认无 TCP 监听、Leaf 主进程退出通过；2 个 WebView 子进程在 15 秒期限后仍存在，之后独立查询已消失。正在记录清理耗时，不能据此宣称完整原生验收通过。
+- `artifacts/native-m8dEH9/results.json` 连续 3 次普通启动/关闭通过，WebView 清理耗时分别为 11,764 / 3,143 / 1,823 ms；诊断观察窗口可达 90 秒，但通过条件仍严格要求不超过 15 秒。
+- 随后的完整原生回归 `artifacts/native-vuvNP8/results.json` 再次在前置关闭探针失败：Leaf 主进程退出，3 个自有 WebView 子进程在 15 秒后仍存在。本轮 Markdown/保存等 UI 流程因此未执行。证明延迟清理仍间歇复现，不能以之前三次通过认定修复。
+- **发布结论：0.3.0 候选包尚未通过完整验收，暂停自动重试与正式交付。** 已修复测试选错辅助窗口的问题，但 WebView 延迟退出的根因未确认；未延长正式通过阈值、未强制结束子进程制造通过。后续应针对 WebView 生命周期/关闭路径开展诊断，而不是重复整套测试等待偶然通过。
+- 以下测试/包记录含历史结果，不表示当前工作树已完成 0.3.0 发布验收。
 
 ## 已通过
 
@@ -18,7 +65,7 @@
   - Markdown 代码围栏不产生错误标题；JS/TS 符号、JSON/YAML 键层级和行号正确。
   - 不支持语言及超过 2 MiB 的文档不做大纲解析。
 - `pnpm build`：严格 TypeScript 检查与 Vite 生产构建通过。
-- `pnpm test:e2e`：已安装 Google Chrome 中 4 个端到端测试通过。
+- `pnpm test:e2e`：已安装 Google Chrome 中 5 个端到端测试通过（含 Markdown 预览安全渲染、图片占位、外链不在预览 WebView 内导航及编辑状态保留）。
   - 标签独立撤销历史、取消关闭保留文本。
   - 临时文件上传与导出，逐字节验证 UTF-8 BOM + CRLF。
   - 右下状态菜单确实向上展开；编辑器失焦后选区颜色仍与活动行明显不同；大纲点击跳转到正确行。
@@ -32,7 +79,7 @@
 
 此前编译因缺少 `kernel32.lib` / `ntdll.lib` 等 Windows SDK import libraries 失败。经用户批准，已安装官方 Microsoft C++ Build Tools 2022 与 Windows SDK 10.0.26100.0，安装器退出码 0；原生环境脚本已验证能获取 x64 SDK/CRT 路径，并保留中文用户目录环境变量。
 
-`pnpm test:native` 当前 **7 项集成测试全部通过**，只操作临时目录：
+`pnpm test:native` 当前 **9 项集成测试全部通过**，只操作临时目录：
 
 - UTF-8、UTF-8 BOM、UTF-16 LE/BE、GBK 与换行的逐字节保存/读回。
 - 旧 hash / 目标已存在拒绝覆盖；原文件被删不自动重建。

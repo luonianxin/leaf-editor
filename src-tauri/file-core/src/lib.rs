@@ -92,6 +92,7 @@ pub struct DirectoryEntry {
 pub struct DirectoryListing {
     pub root: String,
     pub name: String,
+    pub parent: Option<String>,
     pub entries: Vec<DirectoryEntry>,
 }
 
@@ -131,10 +132,19 @@ pub fn list_directory(path: &str) -> Result<DirectoryListing, String> {
             .then_with(|| left.name.cmp(&right.name))
     });
     Ok(DirectoryListing {
+        parent: root.parent().map(|parent| parent.to_string_lossy().into_owned()),
         name: root.file_name().unwrap_or(root.as_os_str()).to_string_lossy().into_owned(),
         root: root.to_string_lossy().into_owned(),
         entries,
     })
+}
+
+pub fn resolve_start_directory(path: &Path) -> Result<String, String> {
+    let resolved = path.canonicalize().map_err(|error| error.to_string())?;
+    if !fs::metadata(&resolved).map_err(|error| error.to_string())?.is_dir() {
+        return Err("Start path is not a directory".into());
+    }
+    Ok(resolved.to_string_lossy().into_owned())
 }
 
 pub fn get_text_file_status(path: &str) -> Result<FileStatus, String> {

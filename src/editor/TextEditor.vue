@@ -9,13 +9,15 @@ import { closeSearchPanel, highlightSelectionMatches, openSearchPanel, search, s
 import { tags } from "@lezer/highlight";
 import type { DocumentTab } from "../core/types";
 import { loadLanguage, type LanguageId } from "./languages";
+import { markdownLivePreview } from "./markdown-live-preview";
 
-const props = defineProps<{ document: DocumentTab; documentIds: string[]; language: LanguageId; dark: boolean; wrap: boolean; fontSize: number }>();
+const props = withDefaults(defineProps<{ document: DocumentTab; documentIds: string[]; language: LanguageId; dark: boolean; wrap: boolean; fontSize: number; visualMarkdown?: boolean }>(), { visualMarkdown: false });
 const emit = defineEmits<{ change: [id: string, text: string]; cursor: [line: number, column: number, selected: number]; ready: [] }>();
 const host = ref<HTMLDivElement>();
 const languageComp = new Compartment();
 const appearanceComp = new Compartment();
 const wrapComp = new Compartment();
+const visualMarkdownComp = new Compartment();
 const states = new Map<string, { state: EditorState; top: number; left: number }>();
 let view: EditorView | undefined;
 let currentId = "";
@@ -71,6 +73,7 @@ function createState(text: string): EditorState {
       search({ top: true }), highlightSelectionMatches(), syntaxHighlighting(defaultHighlightStyle, { fallback: true }), highlights,
       keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
       languageComp.of([]), appearanceComp.of(appearance()), wrapComp.of(props.wrap ? EditorView.lineWrapping : []),
+      visualMarkdownComp.of(props.visualMarkdown && props.language === "markdown" ? markdownLivePreview() : []),
       EditorView.contentAttributes.of({ "aria-label": "文件内容", spellcheck: "false" }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) emit("change", currentId, update.state.doc.toString());
@@ -78,6 +81,10 @@ function createState(text: string): EditorState {
       }),
     ],
   });
+}
+
+function applyVisualMarkdown(): void {
+  view?.dispatch({ effects: visualMarkdownComp.reconfigure(props.visualMarkdown && props.language === "markdown" ? markdownLivePreview() : []) });
 }
 
 async function applyLanguage(): Promise<void> {
@@ -100,7 +107,11 @@ function activate(): void {
     view.setState(cached?.state ?? createState(document.text));
     view.scrollDOM.scrollTop = cached?.top ?? 0;
     view.scrollDOM.scrollLeft = cached?.left ?? 0;
-    view.dispatch({ effects: [appearanceComp.reconfigure(appearance()), wrapComp.reconfigure(props.wrap ? EditorView.lineWrapping : [])] });
+    view.dispatch({ effects: [
+      appearanceComp.reconfigure(appearance()),
+      wrapComp.reconfigure(props.wrap ? EditorView.lineWrapping : []),
+      visualMarkdownComp.reconfigure(props.visualMarkdown && props.language === "markdown" ? markdownLivePreview() : []),
+    ] });
     void applyLanguage();
   }
   const text = view.state.doc.toString();
@@ -123,9 +134,10 @@ onMounted(() => {
 });
 
 watch(() => [props.document.id, props.document.text], activate, { flush: "sync" });
-watch(() => props.language, () => void applyLanguage());
+watch(() => props.language, () => { void applyLanguage(); applyVisualMarkdown(); });
 watch(() => [props.dark, props.fontSize], () => view?.dispatch({ effects: appearanceComp.reconfigure(appearance()) }));
 watch(() => props.wrap, () => view?.dispatch({ effects: wrapComp.reconfigure(props.wrap ? EditorView.lineWrapping : []) }));
+watch(() => props.visualMarkdown, applyVisualMarkdown);
 watch(() => props.documentIds, (ids) => { for (const id of states.keys()) if (!ids.includes(id)) states.delete(id); });
 onBeforeUnmount(() => { destroyed = true; languageGeneration += 1; view?.destroy(); states.clear(); });
 

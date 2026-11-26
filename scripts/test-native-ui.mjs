@@ -67,6 +67,9 @@ function launch(args, env = cleanEnvironment()) {
 async function waitExit(process, timeout = 15000) {
   const until = performance.now() + timeout;
   while (process.exitCode === null && process.signalCode === null && performance.now() < until) await pause(100);
+  if (process.exitCode === null && process.signalCode === null) {
+    results.exitDiagnostics = { processId: process.pid, state: windowAction("inspect", process.pid), logs: process.leafLogs.join("") };
+  }
   assert.ok(process.exitCode !== null || process.signalCode !== null, `Owned process ${process.pid} did not exit.`);
   assert.equal(process.exitCode, 0, `Leaf exit: ${process.leafLogs.join("")}`);
 }
@@ -86,10 +89,15 @@ async function normalPortProbe() {
     state = windowAction("inspect", child.pid);
     if (!state.running) throw new Error(`Leaf exited before showing a window: ${child.leafLogs.join("")}`);
   } while ((!state.hasWindow || state.processes.length < 2) && performance.now() < deadline);
-  // Snapshot the normal production process tree only after WebView startup settles;
-  // otherwise a child could begin listening after the first inspection.
+  // A native HWND and browser process exist before the embedded frontend is ready.
+  // Test closing a loaded editor separately from closing during startup.
+  await expect.poll(() => child.leafLogs.join(""), {
+    timeout: 45000,
+    message: "Normal Release frontend did not report ready before the close probe",
+  }).toContain("Leaf ready:");
   await pause(1500);
   state = windowAction("inspect", child.pid);
+  results.normalProbeState = state;
   assert.ok(state.running && state.hasWindow, "Normal Release did not remain running with a visible window.");
   assert.ok(state.processes.some((item) => /msedgewebview2/i.test(item.name)), "Normal Release did not create its WebView.");
   assert.deepEqual(state.listeners, [], "Default portable Release or its WebView started a TCP listener.");
@@ -100,6 +108,17 @@ async function normalPortProbe() {
   completed("normal portable Release has no TCP listening port", state.processes.map((item) => item.name));
   windowAction("close", child.pid);
   await waitExit(child);
+  const descendants = state.processes.filter(item => item.id !== child.pid).map(item => item.id);
+  const shutdownStarted = performance.now();
+  const observingShutdown = process.argv.includes("--observe-shutdown");
+  await expect.poll(() => {
+    results.afterCloseProcesses = JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-Command", `$ids=@(${descendants.join(",")}); $remaining=@(Get-Process -Id $ids -ErrorAction SilentlyContinue | Select-Object Id,ProcessName); ConvertTo-Json -InputObject $remaining -Compress`], { encoding: "utf8" }).replace(/^﻿/, "").trim());
+    return results.afterCloseProcesses;
+  }, { timeout: observingShutdown ? 90000 : 15000, message: "Owned WebView processes did not finish shutting down after Leaf exited" }).toEqual([]);
+  const shutdownMs = Math.round(performance.now() - shutdownStarted);
+  results.webviewShutdownMs = shutdownMs;
+  console.log(`WebView shutdown observed after ${shutdownMs}ms`);
+  assert.ok(shutdownMs <= 15000, `Observed WebView cleanup ${shutdownMs}ms exceeds the unchanged 15000ms acceptance limit.`);
   child = undefined;
 }
 async function openViaSecondInstance(paths) {
@@ -107,6 +126,9 @@ async function openViaSecondInstance(paths) {
   await waitExit(second);
 }
 try {
+  if (process.argv.includes("--close-only")) {
+    for (let attempt = 0; attempt < 3; attempt += 1) await normalPortProbe();
+  } else {
   await normalPortProbe();
   const port = await findAvailablePort(parsePort(process.env.LEAF_NATIVE_TEST_PORT, 1530));
   const endpoint = `http://127.0.0.1:${port}`;
@@ -148,6 +170,33 @@ try {
   results.launchToEditorObservedMs = Math.round(performance.now() - launchStarted);
   results.frontendMarks = await page.evaluate(() => performance.getEntriesByType("mark").filter((entry) => entry.name.startsWith("leaf:")).map((entry) => ({ name: entry.name, startTime: entry.startTime })));
   completed("embedded frontend loads a Unicode argv file", { url: page.url(), launchToEditorObservedMs: results.launchToEditorObservedMs });
+
+  // Exercise the actual native IPC-backed picker, not browser fixture adapters.
+  await page.getByRole("button", { name: "打开", exact: true }).click();
+  let picker = page.getByRole("dialog", { name: "打开文件", exact: true });
+  await expect(picker.getByRole("option", { name: /outline.md/ })).toBeVisible();
+  await expect(picker.getByRole("option", { name: /nested-link/ })).toHaveAttribute("aria-disabled", "true");
+  await picker.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(documentTabs).toHaveCount(1);
+  await expect(editor).toContainText("第一行");
+  await page.getByRole("button", { name: "打开", exact: true }).click();
+  picker = page.getByRole("dialog", { name: "打开文件", exact: true });
+  await picker.getByRole("option", { name: /root.txt/ }).click();
+  await picker.getByRole("option", { name: /outline.md/ }).click();
+  await page.screenshot({ path: join(artifacts, "native-path-picker.png") });
+  results.screenshots.push(join(artifacts, "native-path-picker.png"));
+  await picker.getByRole("button", { name: "打开", exact: true }).click();
+  await expect(documentTabs).toHaveCount(3);
+  await page.getByRole("button", { name: "关闭 root.txt", exact: true }).click();
+  await page.getByRole("button", { name: "关闭 outline.md", exact: true }).click();
+  await page.getByRole("toolbar").getByRole("button", { name: "打开目录", exact: true }).click();
+  picker = page.getByRole("dialog", { name: "选择文件夹", exact: true });
+  await picker.getByRole("option", { name: /文件夹 nested$/ }).dblclick();
+  await expect(picker.getByRole("option", { name: /inside.txt/ })).toBeVisible();
+  await picker.getByRole("button", { name: "上一级", exact: true }).click();
+  await expect(picker.getByRole("option", { name: /root.txt/ })).toBeVisible();
+  await picker.getByRole("button", { name: "选择文件夹", exact: true }).click();
+  completed("native in-app picker cancels safely, opens multiple files, blocks symlink entries and navigates directories");
 
   const directoryTree = page.getByRole("tree", { name: "workspace 目录树", exact: true });
   await expect(directoryTree).toBeVisible();
@@ -201,6 +250,61 @@ try {
   await detailsOutline.click();
   await expect(page.getByRole("contentinfo")).toContainText("行 4, 列 1");
   completed("status selectors open upward; blurred selection remains visible; outline click jumps to its line");
+  const modes = page.getByRole("contentinfo").getByRole("tablist", { name: "Markdown 模式" });
+  await modes.getByRole("tab", { name: "预览模式", exact: true }).click();
+  await expect(page.locator(".cm-md-live-preview")).toBeVisible();
+  await expect(page.locator(".cm-md-heading-1")).toContainText("Overview");
+  await expect(page.getByRole("contentinfo")).toContainText("行 4, 列 1");
+  await page.keyboard.press("Control+End");
+  await page.keyboard.insertText(" preview edit");
+  await expect(editor).toContainText("preview edit");
+  await page.keyboard.press("Control+z");
+  await expect(editor).not.toContainText("preview edit");
+  await page.keyboard.press("Control+y");
+  await expect(editor).toContainText("preview edit");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expectBytes(outlineFile, Buffer.from("# Overview\nintro\n\n## Details\nbody preview edit"));
+  await page.screenshot({ path: join(artifacts, "native-markdown-preview.png") });
+  results.screenshots.push(join(artifacts, "native-markdown-preview.png"));
+  await modes.getByRole("tab", { name: "源码模式", exact: true }).click();
+  await expect(editor).toContainText("# Overview");
+  await expect(editor).toContainText("## Details");
+  completed("bottom-left Markdown modes preserve cursor, edit/undo/redo, and save exact source bytes");
+  const tableSuffix = "\n\n<!-- preserved -->\n\n| Name | Value |\n| :--- | ---: |\n| **first** | `42` |\n\nBetween\n\n| Other | Count |\n| --- | --- |\n| second | 2 |\n\nAfter\n";
+  const tableSource = "# Overview\nintro\n\n## Details\nbody preview edit" + tableSuffix;
+  await editor.focus();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.insertText(tableSuffix);
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expectBytes(outlineFile, Buffer.from(tableSource));
+  await page.keyboard.press("Control+Home");
+  await modes.getByRole("tab", { name: "预览模式", exact: true }).click();
+  const tableWidgets = page.locator(".cm-md-table-widget");
+  await expect(tableWidgets).toHaveCount(2);
+  await expect(tableWidgets.first().locator("th")).toHaveText(["Name", "Value"]);
+  await expect(tableWidgets.first().locator("th").last()).toHaveCSS("text-align", /^(?:-webkit-)?right$/);
+  await tableWidgets.last().getByRole("button", { name: "编辑表格源码" }).click();
+  await expect(tableWidgets).toHaveCount(1);
+  await page.keyboard.press("End");
+  await page.keyboard.insertText(" ");
+  await page.keyboard.press("Control+Home");
+  await expect(tableWidgets).toHaveCount(2);
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expectBytes(outlineFile, Buffer.from(tableSource.replace("| Other | Count |", "| Other | Count | ")));
+  await editor.focus();
+  await page.keyboard.press("Control+z");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expectBytes(outlineFile, Buffer.from(tableSource));
+  await editor.focus();
+  await page.keyboard.press("Control+y");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expectBytes(outlineFile, Buffer.from(tableSource.replace("| Other | Count |", "| Other | Count | ")));
+  await editor.focus();
+  await page.keyboard.press("Control+Home");
+  await expect(tableWidgets).toHaveCount(2);
+  await page.screenshot({ path: join(artifacts, "native-markdown-tables.png") });
+  results.screenshots.push(join(artifacts, "native-markdown-tables.png"));
+  completed("native GFM tables render, target the correct source, and preserve surrounding bytes through save/undo/redo");
   await page.getByRole("tab", { name: "文件", exact: true }).click();
   await page.getByRole("button", { name: "关闭 outline.md", exact: true }).click();
   await expect(documentTabs).toHaveCount(2);
@@ -332,6 +436,7 @@ try {
   assert.ok((await readdir(profile)).length > 0, "Portable WebView data was not created beside the executable.");
   completed("portable profile is written under the extracted folder data/webview", profile);
   await normalPortProbe();
+  }
   results.finishedAt = new Date().toISOString();
   results.passed = true;
 } catch (error) {
