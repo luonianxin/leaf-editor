@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-editor"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "leaf-file-core",
  "notify",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-file-core"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "encoding_rs",
  "serde",

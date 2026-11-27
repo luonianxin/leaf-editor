@@ -1,5 +1,15 @@
 use leaf_file_core::{list_directory, read_text_file, save_text_file, Encoding, LineEnding, SaveRequest, SaveResult};
 #[test]
+fn display_paths_remove_windows_extended_length_prefixes_for_drive_and_unc_paths() {
+    use leaf_file_core::display_path;
+    use std::path::Path;
+
+    assert_eq!(display_path(Path::new(r"\\?\C:\Users\Reader\note.txt")), r"C:\Users\Reader\note.txt");
+    assert_eq!(display_path(Path::new(r"\\?\UNC\server\share\note.txt")), r"\\server\share\note.txt");
+    assert_eq!(display_path(Path::new(r"C:\Users\Reader\note.txt")), r"C:\Users\Reader\note.txt");
+}
+
+#[test]
 fn save_roundtrips_all_encodings_without_losing_newline_or_bom_choice() {
     let dir = tempfile::tempdir().unwrap();
     for (index, (encoding, bytes)) in [
@@ -173,10 +183,10 @@ fn directory_listing_is_shallow_sorted_and_rejects_non_directories() {
     std::fs::write(dir.path().join("z-folder").join("nested.txt"), "nested").unwrap();
 
     let listing = list_directory(dir.path().to_str().unwrap()).unwrap();
-    assert_eq!(listing.root, dir.path().canonicalize().unwrap().to_string_lossy());
+    assert_eq!(listing.root, leaf_file_core::display_path(&dir.path().canonicalize().unwrap()));
     assert_eq!(
         listing.parent.as_deref(),
-        dir.path().canonicalize().unwrap().parent().map(|path| path.to_string_lossy()).as_deref()
+        dir.path().canonicalize().unwrap().parent().map(leaf_file_core::display_path).as_deref()
     );
     assert_eq!(
         listing.entries.iter().map(|entry| (entry.name.as_str(), entry.kind)).collect::<Vec<_>>(),
@@ -205,7 +215,7 @@ fn start_directory_is_canonical_and_must_be_a_directory() {
     let nested = dir.path().join("nested");
     std::fs::create_dir(&nested).unwrap();
     let resolved = leaf_file_core::resolve_start_directory(&nested).unwrap();
-    assert_eq!(resolved, nested.canonicalize().unwrap().to_string_lossy());
+    assert_eq!(resolved, leaf_file_core::display_path(&nested.canonicalize().unwrap()));
 
     let file = nested.join("file.txt");
     std::fs::write(&file, "content").unwrap();

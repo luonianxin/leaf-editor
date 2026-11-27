@@ -30,6 +30,23 @@ export async function supplementLicenses(entries, root) {
     entry.files.push(fullText);
     entry.supplementalNotice = `${rule.marker}\nSPDX-License-Identifier: MIT\nOriginal declaration: ${rule.notice}\nDistribution under the package's offered MIT alternative; full upstream permission text follows.\n`;
   }
+  // khroma ships a complete MIT file but omits package.json's license field.
+  // Accept only the exact reviewed package/repository/text combination.
+  for (const entry of entries) {
+    if (entry.name !== "khroma" || entry.version !== "2.1.0" || entry.license !== "UNDECLARED") continue;
+    const manifestPath = join(entry.directory, "package.json");
+    const licensePath = join(entry.directory, "license");
+    if (!(await exists(manifestPath)) || !(await exists(licensePath))) continue;
+    const manifest = await readJson(manifestPath);
+    const text = await readFile(licensePath, "utf8");
+    if (manifest.repository !== "github:fabiospampinato/khroma" ||
+        !text.includes("The MIT License (MIT)") ||
+        !text.includes("Copyright (c) 2019-present Fabio Spampinato, Andrew Maney") ||
+        !text.includes("Permission is hereby granted, free of charge")) continue;
+    entry.license = "MIT";
+    if (!entry.files.includes(licensePath)) entry.files.push(licensePath);
+    entry.supplementalNotice = "Installed package.json omits a license field; the exact package's bundled license file identifies MIT and retains the original copyright and terms.\n";
+  }
   const webviewRules = { "webview2-com": "0.38.2", "webview2-com-sys": "0.38.2", "webview2-com-macros": "0.8.1" };
   for (const entry of entries) {
     if (webviewRules[entry.name] !== entry.version || entry.license !== "MIT") continue;

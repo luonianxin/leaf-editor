@@ -1,6 +1,8 @@
 import { syntaxTree } from "@codemirror/language";
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from "@codemirror/state";
 import { renderMarkdownPreview } from "../markdown/renderer";
+import { replaceableMermaidDiagrams } from "./markdown-diagrams";
+import { renderMermaidDiagram } from "./mermaid-renderer";
 import { replaceableMarkdownTables } from "./markdown-tables";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
@@ -101,6 +103,84 @@ class HorizontalRuleWidget extends WidgetType {
   }
 }
 
+const mermaidObservers = new WeakMap<HTMLElement, MutationObserver>();
+
+class MermaidDiagramWidget extends WidgetType {
+  constructor(readonly source: string) { super(); }
+
+  override eq(other: WidgetType): boolean {
+    return other instanceof MermaidDiagramWidget && other.source === this.source;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "cm-md-mermaid-widget";
+    wrapper.setAttribute("role", "group");
+    wrapper.setAttribute("aria-label", "Mermaid 图表");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cm-md-mermaid-edit";
+    button.textContent = "编辑图表源码";
+
+    const canvas = document.createElement("div");
+    canvas.className = "cm-md-mermaid-canvas";
+    let generation = 0;
+    const render = (): void => {
+      const currentGeneration = generation += 1;
+      canvas.className = "cm-md-mermaid-canvas cm-md-mermaid-loading";
+      canvas.textContent = "正在渲染图表…";
+      const dark = document.documentElement.dataset.theme === "dark";
+      void renderMermaidDiagram(this.source, dark).then((svg) => {
+        if (wrapper.dataset.destroyed || currentGeneration !== generation) return;
+        canvas.className = "cm-md-mermaid-canvas";
+        // Mermaid strict mode sanitizes labels and disables executable links.
+        canvas.innerHTML = svg;
+        const rendered = canvas.querySelector("svg");
+        rendered?.setAttribute("role", "img");
+        rendered?.setAttribute("aria-label", "Mermaid 图表");
+      }).catch((error: unknown) => {
+        if (wrapper.dataset.destroyed || currentGeneration !== generation) return;
+        canvas.className = "cm-md-mermaid-canvas cm-md-mermaid-error";
+        const title = document.createElement("strong");
+        title.textContent = error instanceof Error && error.message ? error.message.split("\n", 1)[0]! : "Mermaid 图表无法渲染";
+        const source = document.createElement("pre");
+        source.textContent = this.source;
+        canvas.replaceChildren(title, source);
+      });
+    };
+
+    const observer = new MutationObserver(() => render());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    mermaidObservers.set(wrapper, observer);
+    render();
+
+    wrapper.append(button, canvas);
+    wrapper.addEventListener("mousedown", (event) => event.preventDefault());
+    wrapper.addEventListener("click", () => {
+      if (view.composing) return;
+      const position = view.posAtDOM(wrapper);
+      const decorations = view.state.field(markdownDiagramDecorations).decorations;
+      let target: number | undefined;
+      decorations.between(position, position, (from, to, decoration) => {
+        if (decoration.spec.widget instanceof MermaidDiagramWidget && from <= position && to >= position) target = from;
+      });
+      if (target === undefined) return;
+      view.dispatch({ selection: { anchor: target }, scrollIntoView: true });
+      view.focus();
+    });
+    return wrapper;
+  }
+
+  override destroy(dom: HTMLElement): void {
+    dom.dataset.destroyed = "true";
+    mermaidObservers.get(dom)?.disconnect();
+    mermaidObservers.delete(dom);
+  }
+
+  override ignoreEvent(): boolean { return true; }
+}
+
 class MarkdownTableWidget extends WidgetType {
   constructor(readonly source: string) { super(); }
 
@@ -141,6 +221,23 @@ class MarkdownTableWidget extends WidgetType {
 
   override ignoreEvent(): boolean { return true; }
 }
+
+function diagramDecorationsFor(state: EditorState): DecorationSet {
+  return Decoration.set(replaceableMermaidDiagrams(state).map(({ from, to, source }) =>
+    Decoration.replace({ block: true, widget: new MermaidDiagramWidget(source) }).range(from, to)), true);
+}
+
+export const markdownDiagramDecorations = StateField.define<{ decorations: DecorationSet }>({
+  create: (state) => ({ decorations: diagramDecorationsFor(state) }),
+  update(value, transaction) {
+    if (transaction.docChanged || transaction.selection || transaction.reconfigured ||
+        syntaxTree(transaction.startState) !== syntaxTree(transaction.state)) {
+      return { decorations: diagramDecorationsFor(transaction.state) };
+    }
+    return value;
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+});
 
 const tableComposition = StateEffect.define<boolean>();
 
@@ -287,6 +384,15 @@ const markdownModeAttributes = EditorView.editorAttributes.compute(["doc"], (sta
 
 const markdownTheme = EditorView.theme({
   "&.cm-md-live-preview .cm-content": { fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" },
+  ".cm-md-mermaid-widget": { margin: "10px 24px 14px 20px", maxWidth: "calc(100% - 44px)", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", color: "var(--color-base-content)" },
+  ".cm-md-mermaid-canvas": { overflowX: "auto", minHeight: "96px", border: "1px solid var(--color-base-300)", borderRadius: "8px", backgroundColor: "var(--color-base-100)", padding: "14px" },
+  ".cm-md-mermaid-canvas svg": { display: "block", width: "auto", maxWidth: "100%", height: "auto", margin: "0 auto" },
+  ".cm-md-mermaid-loading": { display: "flex", alignItems: "center", justifyContent: "center", color: "var(--syntax-comment)", fontSize: "12px" },
+  ".cm-md-mermaid-error": { color: "var(--color-base-content)", borderColor: "color-mix(in srgb, var(--color-error) 45%, var(--color-base-300))" },
+  ".cm-md-mermaid-error strong": { display: "block", color: "var(--color-error)", marginBottom: "8px", fontSize: "12px" },
+  ".cm-md-mermaid-error pre": { overflowX: "auto", margin: "0", whiteSpace: "pre", color: "var(--syntax-comment)", fontFamily: "'Cascadia Code', 'Consolas', monospace", fontSize: "12px" },
+  ".cm-md-mermaid-edit": { cursor: "pointer", color: "var(--color-primary)", backgroundColor: "var(--color-base-100)", border: "1px solid var(--color-base-300)", borderRadius: "4px", padding: "2px 8px", marginBottom: "5px", fontSize: "12px" },
+  ".cm-md-mermaid-edit:focus-visible": { outline: "2px solid var(--color-primary)", outlineOffset: "2px" },
   ".cm-md-table-widget": { margin: "8px 24px 12px 20px", maxWidth: "calc(100% - 44px)", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", color: "var(--color-base-content)" },
   ".cm-md-table-scroll": { overflowX: "auto", maxWidth: "100%" },
   ".cm-md-table-widget table": { borderCollapse: "collapse", width: "max-content", minWidth: "100%" },
@@ -339,5 +445,5 @@ const markdownTheme = EditorView.theme({
 });
 
 export function markdownLivePreview(): Extension {
-  return [markdownModeAttributes, markdownTableDecorations, tableCompositionHandlers, markdownDecorations, markdownTheme];
+  return [markdownModeAttributes, markdownDiagramDecorations, markdownTableDecorations, tableCompositionHandlers, markdownDecorations, markdownTheme];
 }

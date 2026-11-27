@@ -88,6 +88,21 @@ test("version-pinned Tauri supplement retains the distributed package copyright"
   await assert.rejects(main({ root, includeCargo: false }), /unresolved obligation/);
 });
 
+test("version-pinned undeclared npm package uses its own bundled MIT terms", async t => {
+  const { root, pkg } = await fixture(t);
+  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { khroma: "2.1.0" } }));
+  const dir = await pkg("khroma", { version: "2.1.0", license: undefined, repository: "github:fabiospampinato/khroma" }, null);
+  await writeFile(join(dir, "license"), `The MIT License (MIT)\n\nCopyright (c) 2019-present Fabio Spampinato, Andrew Maney\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files.\n${"Full MIT permission and disclaimer text. ".repeat(8)}`);
+  const result = await main({ root, includeCargo: false });
+  const entry = result.entries.find(item => item.name === "khroma");
+  assert.equal(entry.license, "MIT");
+  assert.match(result.text, /package\.json omits a license field/);
+  assert.match(result.text, /Copyright \(c\) 2019-present Fabio Spampinato, Andrew Maney/);
+
+  await writeFile(join(dir, "package.json"), JSON.stringify({ name: "khroma", version: "2.2.0", repository: "github:fabiospampinato/khroma" }));
+  await assert.rejects(main({ root, includeCargo: false }), /unresolved obligation/);
+});
+
 test("honors nonstandard explicitly declared npm license file", async t => {
   const { root, pkg } = await fixture(t);
   const dir = await pkg("alpha", { license: "SEE LICENSE IN legal.txt" }, null);

@@ -41,6 +41,16 @@ use std::{
     time::UNIX_EPOCH,
 };
 pub const MAX_FILE_SIZE: u64 = 16 * 1024 * 1024;
+
+/// Converts Windows extended-length paths into the conventional form for UI/API output.
+/// Internal filesystem operations continue using canonical `PathBuf` values.
+pub fn display_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{unc}");
+    }
+    value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
+}
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveRequest {
@@ -115,7 +125,7 @@ pub fn list_directory(path: &str) -> Result<DirectoryListing, String> {
             continue;
         };
         entries.push(DirectoryEntry {
-            path: entry.path().to_string_lossy().into_owned(),
+            path: display_path(&entry.path()),
             name: entry.file_name().to_string_lossy().into_owned(),
             kind,
         });
@@ -132,9 +142,9 @@ pub fn list_directory(path: &str) -> Result<DirectoryListing, String> {
             .then_with(|| left.name.cmp(&right.name))
     });
     Ok(DirectoryListing {
-        parent: root.parent().map(|parent| parent.to_string_lossy().into_owned()),
+        parent: root.parent().map(display_path),
         name: root.file_name().unwrap_or(root.as_os_str()).to_string_lossy().into_owned(),
-        root: root.to_string_lossy().into_owned(),
+        root: display_path(&root),
         entries,
     })
 }
@@ -144,7 +154,7 @@ pub fn resolve_start_directory(path: &Path) -> Result<String, String> {
     if !fs::metadata(&resolved).map_err(|error| error.to_string())?.is_dir() {
         return Err("Start path is not a directory".into());
     }
-    Ok(resolved.to_string_lossy().into_owned())
+    Ok(display_path(&resolved))
 }
 
 pub fn get_text_file_status(path: &str) -> Result<FileStatus, String> {
@@ -264,7 +274,7 @@ pub fn save_text_file(request: SaveRequest) -> Result<SaveResult, String> {
         }
         return Err(format!("Atomic save failed: {error}"));
     }
-    Ok(SaveResult::Written { path: path.to_string_lossy().into_owned(), version })
+    Ok(SaveResult::Written { path: display_path(&path), version })
 }
 
 // ReplaceFileW preserves the replaced file's ACL and metadata and requires an
@@ -415,7 +425,7 @@ pub fn read_text_file(path: &str, encoding: Option<Encoding>) -> Result<FileSnap
     let (text, line_ending) = normalize(&text);
     Ok(FileSnapshot {
         name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
-        path: path.to_string_lossy().into_owned(),
+        path: display_path(&path),
         text,
         encoding,
         line_ending,

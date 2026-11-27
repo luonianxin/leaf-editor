@@ -105,7 +105,7 @@ fn launch_targets(args: impl IntoIterator<Item = String>, cwd: &Path) -> LaunchT
         if !normalized.is_absolute() {
             continue;
         }
-        let value = normalized.to_string_lossy().into_owned();
+        let value = leaf_file_core::display_path(&normalized);
         if is_directory {
             if seen_directories.insert(value.clone()) {
                 directories.push(value);
@@ -138,7 +138,7 @@ async fn set_watched_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<
         let targets: Vec<(String, PathBuf)> = paths
             .into_iter()
             .map(|path| {
-                leaf_file_core::resolve_path(&path).map(|resolved| (resolved.to_string_lossy().into_owned(), resolved))
+                leaf_file_core::resolve_path(&path).map(|resolved| (leaf_file_core::display_path(&resolved), resolved))
             })
             .collect::<Result<_, _>>()?;
         let parents: HashSet<PathBuf> =

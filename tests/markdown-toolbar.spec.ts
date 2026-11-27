@@ -11,6 +11,10 @@ test("Markdown toolbar formats one undo step and renders inserted rules and tabl
   const editor = page.getByRole("textbox", { name: "文件内容", exact: true });
   const toolbar = page.getByRole("toolbar", { name: "Markdown 格式" });
   await expect(toolbar).toBeVisible();
+  await expect(toolbar.locator('[data-markdown-icon="link"]').first()).toBeVisible();
+  await expect(toolbar.locator('[data-markdown-icon="ordered-list"]').first()).toBeVisible();
+  await expect(toolbar.locator('[data-markdown-icon="unordered-list"]').first()).toBeVisible();
+  await expect(toolbar.locator('[data-markdown-icon="image"]').first()).toBeVisible();
 
   await editor.click();
   await page.keyboard.insertText("中文 Leaf");
@@ -56,6 +60,34 @@ test("Markdown toolbar formats one undo step and renders inserted rules and tabl
   await page.getByRole("button", { name: "切换深色主题", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.screenshot({ path: "artifacts/markdown-toolbar-dark.png" });
+});
+
+test("editor cursor uses a calm blink and stays still when reduced motion is requested", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "文件内容", exact: true });
+  await editor.click();
+  const cursor = page.locator(".cm-cursorLayer").first();
+  await expect(page.locator(".cm-cursor").first()).toBeVisible();
+  await expect.poll(() => cursor.evaluate((element) => getComputedStyle(element).animationDuration)).toBe("2.4s");
+
+  // Inspect the animation that actually controls visibility, not an unused
+  // animation-duration property on the child cursor stroke.
+  const samples = await cursor.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    if (!animation) throw new Error("Cursor layer has no running animation");
+    animation.pause();
+    const values = [0, 1100, 1300, 2300, 2500].map((time) => {
+      animation.currentTime = time;
+      return getComputedStyle(element).opacity;
+    });
+    animation.play();
+    return values;
+  });
+  expect(samples).toEqual(["1", "1", "0", "0", "1"]);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => cursor.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+  await expect(cursor).toHaveCSS("opacity", "1");
 });
 
 test("Markdown keyboard shortcuts format current lines and partial selections", async ({ page }) => {

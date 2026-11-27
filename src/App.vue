@@ -6,6 +6,7 @@ import { buildOutline, MAX_OUTLINE_CHARS } from "./core/outline";
 import { ENCODINGS, LINE_ENDINGS, type DocumentTab, type Encoding, type LineEnding } from "./core/types";
 import { browserFiles, directoryPort, downloadDocument, filePort, isDesktop } from "./platform/files";
 import DirectoryTreeNode from "./components/DirectoryTreeNode.vue";
+import MarkdownToolIcon from "./components/MarkdownToolIcon.vue";
 import StatusSelect from "./components/StatusSelect.vue";
 import { LANGUAGES, languageFor, type LanguageId } from "./editor/languages";
 import type { MarkdownFormatAction, MarkdownFormatOptions } from "./editor/markdown-formatting";
@@ -38,7 +39,7 @@ const fontSize = ref(14);
 const cursor = reactive({ line: 1, column: 1, selected: 0 });
 const languageOverrides = reactive(new Map<string, LanguageId>());
 const language = computed(() => active.value ? languageOverrides.get(active.value.id) ?? languageFor(active.value.name) : "text");
-interface MarkdownTool { action: MarkdownFormatAction; label: string; symbol: string; symbolClass?: string; primary: boolean }
+interface MarkdownTool { action: MarkdownFormatAction; label: string; symbol?: string; symbolClass?: string; icon?: boolean; primary: boolean }
 const markdownTools: readonly MarkdownTool[] = [
   { action: "bold", label: "加粗", symbol: "B", symbolClass: "font-bold", primary: true },
   { action: "italic", label: "斜体", symbol: "I", symbolClass: "italic", primary: true },
@@ -47,12 +48,12 @@ const markdownTools: readonly MarkdownTool[] = [
   { action: "heading1", label: "一级标题", symbol: "H1", symbolClass: "text-[10px] font-semibold", primary: true },
   { action: "heading2", label: "二级标题", symbol: "H2", symbolClass: "text-[10px] font-semibold", primary: true },
   { action: "blockquote", label: "引用", symbol: "❝", primary: true },
-  { action: "link", label: "链接", symbol: "↗", primary: false },
-  { action: "unorderedList", label: "无序列表", symbol: "•", primary: false },
-  { action: "orderedList", label: "有序列表", symbol: "1.", symbolClass: "text-[10px] font-semibold", primary: false },
+  { action: "link", label: "链接", icon: true, primary: false },
+  { action: "unorderedList", label: "无序列表", icon: true, primary: false },
+  { action: "orderedList", label: "有序列表", icon: true, primary: false },
   { action: "horizontalRule", label: "分隔线", symbol: "—", primary: false },
   { action: "codeBlock", label: "代码块", symbol: "{}", symbolClass: "font-mono text-[10px]", primary: false },
-  { action: "image", label: "图片语法", symbol: "▧", primary: false },
+  { action: "image", label: "图片语法", icon: true, primary: false },
   { action: "table", label: "插入表格", symbol: "▦", primary: false },
 ];
 const outline = computed(() => active.value ? buildOutline(active.value.text, language.value) : []);
@@ -485,7 +486,7 @@ onBeforeUnmount(() => {
         :disabled="active.busy"
         @mousedown.prevent
         @click="runMarkdownTool(tool.action)"
-      ><span :class="tool.symbolClass">{{ tool.symbol }}</span></button>
+      ><MarkdownToolIcon v-if="tool.icon" :action="tool.action" /><span v-else :class="tool.symbolClass">{{ tool.symbol }}</span></button>
       <span class="mx-1 h-4 shrink-0 border-l border-base-300" />
       <div class="hidden items-center gap-1 lg:flex">
         <button
@@ -498,13 +499,13 @@ onBeforeUnmount(() => {
           :disabled="active.busy"
           @mousedown.prevent="tool.action !== 'table'"
           @click="runMarkdownTool(tool.action)"
-        ><span :class="tool.symbolClass">{{ tool.symbol }}</span></button>
+        ><MarkdownToolIcon v-if="tool.icon" :action="tool.action" /><span v-else :class="tool.symbolClass">{{ tool.symbol }}</span></button>
       </div>
       <details ref="markdownMore" class="dropdown dropdown-end ml-auto lg:hidden">
         <summary class="btn btn-ghost btn-xs px-2 text-[10px]">更多</summary>
         <ul class="menu dropdown-content z-30 mt-1 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg" aria-label="更多 Markdown 格式">
           <li v-for="tool in markdownTools.filter((item) => !item.primary)" :key="tool.action">
-            <button type="button" class="gap-3 text-xs" :aria-label="tool.label" :disabled="active.busy" @click="runMarkdownTool(tool.action)"><span class="flex w-5 justify-center" :class="tool.symbolClass">{{ tool.symbol }}</span>{{ tool.label }}</button>
+            <button type="button" class="gap-3 text-xs" :aria-label="tool.label" :disabled="active.busy" @click="runMarkdownTool(tool.action)"><span class="flex w-5 justify-center"><MarkdownToolIcon v-if="tool.icon" :action="tool.action" /><span v-else :class="tool.symbolClass">{{ tool.symbol }}</span></span>{{ tool.label }}</button>
           </li>
         </ul>
       </details>

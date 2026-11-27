@@ -68,7 +68,7 @@ function createState(text: string): EditorState {
   return EditorState.create({
     doc: text,
     extensions: [
-      history(), lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(),
+      history(), lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection({ cursorBlinkRate: 2400 }),
       dropCursor(), rectangularSelection(), crosshairCursor(), bracketMatching(), closeBrackets(), indentOnInput(), foldGutter(),
       EditorState.phrases.of({ Find: "查找内容", Replace: "替换为", next: "下一个", previous: "上一个", all: "全部选中", "match case": "区分大小写", regexp: "正则表达式", "by word": "整词匹配", replace: "替换", "replace all": "全部替换", close: "关闭查找", "Go to line": "跳转到行", go: "跳转" }),
       search({ top: true }), highlightSelectionMatches(), syntaxHighlighting(defaultHighlightStyle, { fallback: true }), highlights,

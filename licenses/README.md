@@ -9,6 +9,10 @@ The portable ZIP retains original installed LICENSE/NOTICE/COPYRIGHT files for t
 
 These decisions apply only to those exact declared versions/identifiers. They do not license unlicensed packages, infer a copyright owner from a name, or borrow unrelated package terms. Original package/source notice material is included alongside the supplement. For a public release, independently review the full inventory and Microsoft runtime redistribution terms.
 
+## Frontend packages with incomplete metadata
+
+- `khroma@2.1.0` omits the `license` field from its installed `package.json`, but that exact package includes a complete lowercase `license` file stating MIT, retaining `Copyright (c) 2019-present Fabio Spampinato, Andrew Maney`, the permission grant and disclaimer. The collector accepts only version `2.1.0` with repository `github:fabiospampinato/khroma` and those bundled text markers; another version, repository or text fails closed.
+
 ## WebView2 Rust bindings and Microsoft SDK
 
 - `webview2-com@0.38.2` / `webview2-com-sys@0.38.2` identify `wravery/webview2-rs` as the repository. The omitted root MIT license was retrieved through the GitHub contents API at recorded commit `b74dc5e2b394044bea5191052868ce7a106c202c`; the macros crate at `dffa41a8a46d3f5565eefbff2de57d38d399f158` returns the identical license blob `de9a7e660e173136b351982a34f715af424ff812`. The original 2021 Bill Avery notice is retained in `WebView2-Rust-MIT.txt`.

@@ -74,7 +74,10 @@ button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 
 .menu .menu-active { background: color-mix(in srgb, var(--color-primary) 9%, var(--color-base-100)); color: var(--color-base-content); }
 .status-menu-enter-active, .status-menu-leave-active { transition: opacity 140ms ease, transform 140ms ease; transform-origin: bottom right; }
 .status-menu-enter-from, .status-menu-leave-to { opacity: 0; transform: translateY(4px) scale(0.98); }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .cm-editor .cm-cursorLayer { animation: none !important; opacity: 1 !important; }
+}
 .markdown-preview-content { color: var(--color-base-content); font-size: 0.95rem; line-height: 1.75; }
 .markdown-preview-content > :first-child { margin-top: 0; }
 .markdown-preview-content > :last-child { margin-bottom: 0; }
